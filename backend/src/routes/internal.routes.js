@@ -16,7 +16,6 @@ router.use(internalApiLimiter);
 /**
  * GET /internal/entities
  * Returns entity list for Legal CRM
- * (Existing endpoint - unchanged response format)
  */
 router.get("/entities", hmacAuth, async (req, res, next) => {
   try {
@@ -25,7 +24,7 @@ router.get("/entities", hmacAuth, async (req, res, next) => {
       query: req.query,
     });
 
-    const entities = await prisma.plottingCompany.findMany({
+    const companies = await prisma.plottingCompany.findMany({
       where: { isActive: true },
       select: {
         id: true,
@@ -33,9 +32,35 @@ router.get("/entities", hmacAuth, async (req, res, next) => {
         name: true,
         description: true,
         isActive: true,
+        groupId: true,
+        group: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            color: true,
+          },
+        },
       },
       orderBy: { code: "asc" },
     });
+
+    const entities = companies.map((company) => ({
+      id: company.id,
+      code: company.code,
+      name: company.name,
+      description: company.description,
+      isActive: company.isActive,
+      groupId: company.groupId,
+      group: company.group
+        ? {
+            id: company.group.id,
+            code: company.group.code,
+            name: company.group.name,
+            color: company.group.color,
+          }
+        : null,
+    }));
 
     res.json({
       success: true,
