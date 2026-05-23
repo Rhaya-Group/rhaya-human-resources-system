@@ -100,7 +100,9 @@ router.get("/entity-groups", hmacAuth, async (req, res, next) => {
 /**
  * GET /internal/entities
  * Returns entity list for Legal CRM
- * (Existing endpoint - now includes group relation)
+ *
+ * Response includes both entities and groups arrays for compatibility
+ * with Legal CRM's entitySync.service.js
  */
 router.get("/entities", hmacAuth, async (req, res, next) => {
   try {
@@ -109,6 +111,7 @@ router.get("/entities", hmacAuth, async (req, res, next) => {
       query: req.query,
     });
 
+    // Fetch entities with group relation
     const companies = await prisma.plottingCompany.findMany({
       where: { isActive: true },
       select: {
@@ -123,35 +126,84 @@ router.get("/entities", hmacAuth, async (req, res, next) => {
             id: true,
             code: true,
             name: true,
+            description: true,
             color: true,
+            isActive: true,
+          },
+        },
+        _count: {
+          select: {
+            users: true,
           },
         },
       },
       orderBy: { code: "asc" },
     });
 
-    // Map to include group info at root level
+    // Fetch all active entity groups
+    const entityGroups = await prisma.entityGroup.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        description: true,
+        color: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: { code: "asc" },
+    });
+
+    // Map entities to include employee count and group reference
     const entities = companies.map((company) => ({
       id: company.id,
       code: company.code,
       name: company.name,
       description: company.description,
       isActive: company.isActive,
+      employeeCount: company._count.users,
       groupId: company.groupId,
+      // Include full group object for backward compatibility
       group: company.group
         ? {
             id: company.group.id,
             code: company.group.code,
             name: company.group.name,
+            description: company.group.description,
             color: company.group.color,
+            isActive: company.group.isActive,
           }
         : null,
     }));
 
+    // Map groups for Legal CRM's group sync
+    const groups = entityGroups.map((g) => ({
+      id: g.id,
+      code: g.code,
+      name: g.name,
+      description: g.description,
+      color: g.color,
+      isActive: g.isActive,
+      createdAt: g.createdAt,
+      updatedAt: g.updatedAt,
+    }));
+
+    console.log("[Internal] GET /entities success", {
+      clientId: req.clientId,
+      entityCount: entities.length,
+      groupCount: groups.length,
+    });
+
+    // Response format matches Legal CRM's expectations:
+    // - entities array with groupId and employeeCount
+    // - groups array for syncing entity groups
     res.json({
       success: true,
       count: entities.length,
       entities,
+      groups, // Legal CRM will sync these
     });
   } catch (err) {
     console.error("[Internal] GET /entities error:", err);
@@ -303,7 +355,7 @@ router.get("/employees/:id", hmacAuth, async (req, res, next) => {
       employeeId: id,
     });
 
-    // ✅ Validate ID format (CUID)
+    // Validate ID format (CUID)
     if (!id || typeof id !== "string" || id.length < 10) {
       return res.status(400).json({
         error: "Invalid employee ID format",
@@ -348,7 +400,7 @@ router.get("/employees/:id", hmacAuth, async (req, res, next) => {
       });
     }
 
-    const INACTIVE_STATUSES = ["Inactive", "Resigned", "Terminated"];
+    const INACTIVE_STATUSES = ["INACTIVE", "Resigned", "Terminated"];
 
     const employee = {
       id: user.id,
