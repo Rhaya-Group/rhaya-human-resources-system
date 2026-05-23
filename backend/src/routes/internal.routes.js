@@ -14,8 +14,93 @@ const prisma = new PrismaClient();
 router.use(internalApiLimiter);
 
 /**
+ * GET /internal/entity-groups
+ * Returns entity group list for Legal CRM
+ *
+ * Query params:
+ *   - since: ISO datetime, optional. Delta sync filter.
+ */
+router.get("/entity-groups", hmacAuth, async (req, res, next) => {
+  try {
+    const { since } = req.query;
+
+    console.log("[Internal] GET /entity-groups", {
+      clientId: req.clientId,
+      query: req.query,
+    });
+
+    const where = { isActive: true };
+
+    // ✅ Validate since parameter
+    if (since) {
+      const sinceDate = new Date(since);
+      if (isNaN(sinceDate.getTime())) {
+        return res.status(400).json({
+          error: "Invalid since parameter",
+          message: "Must be a valid ISO 8601 datetime",
+          example: "2024-01-01T00:00:00Z",
+        });
+      }
+      where.updatedAt = { gte: sinceDate };
+    }
+
+    const groups = await prisma.entityGroup.findMany({
+      where,
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        description: true,
+        color: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: {
+          select: {
+            companies: true,
+          },
+        },
+      },
+      orderBy: { code: "asc" },
+    });
+
+    const entityGroups = groups.map((g) => ({
+      id: g.id,
+      code: g.code,
+      name: g.name,
+      description: g.description,
+      color: g.color,
+      isActive: g.isActive,
+      entityCount: g._count.companies,
+      createdAt: g.createdAt,
+      updatedAt: g.updatedAt,
+    }));
+
+    console.log("[Internal] GET /entity-groups success", {
+      clientId: req.clientId,
+      count: entityGroups.length,
+      filtered: !!since,
+    });
+
+    res.json({
+      success: true,
+      syncedAt: new Date().toISOString(),
+      count: entityGroups.length,
+      entityGroups,
+      _meta: {
+        since: since || null,
+      },
+    });
+  } catch (err) {
+    console.error("[Internal] GET /entity-groups error:", err);
+    next(err);
+  }
+});
+
+/**
  * GET /internal/entities
  * Returns entity list for Legal CRM
+ * (Existing endpoint - now includes group relation)
  */
 router.get("/entities", hmacAuth, async (req, res, next) => {
   try {
@@ -45,6 +130,7 @@ router.get("/entities", hmacAuth, async (req, res, next) => {
       orderBy: { code: "asc" },
     });
 
+    // Map to include group info at root level
     const entities = companies.map((company) => ({
       id: company.id,
       code: company.code,
