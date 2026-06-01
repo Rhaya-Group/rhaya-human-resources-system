@@ -8,7 +8,7 @@ import { useTranslation } from "react-i18next";
 import apiClient from "../api/client";
 import LanguageToggle from "./LanguageToggle";
 import { useInternalPolicyUrl } from "../hooks/useInternalPolicyUrl";
-import { FileText, ExternalLink } from "lucide-react";
+import { Shield } from "lucide-react";
 
 // Icons
 const DashboardIcon = () => (
@@ -408,7 +408,7 @@ export default function Layout({ children }) {
       navItems.push({
         path: "/settings/entity-policies",
         label: "Entity Policies",
-        icon: BuildingIcon,
+        icon: Shield,
         type: "link",
       });
     }
