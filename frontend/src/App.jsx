@@ -30,6 +30,7 @@ import ResetPassword from "./pages/ResetPassword";
 import LeaveDetail from "./pages/LeaveDetail";
 import CompanyDivisionManagement from "./pages/CompanyDivisionManagement";
 import EntityGroupManagement from "./pages/EntityGroupManagement";
+import PolicyTemplateManagement from "./pages/PolicyTemplateManagement";
 
 // Layout
 import Layout from "./components/Layout";
@@ -261,6 +262,15 @@ function App() {
             element={
               <ProtectedRoute allowedLevels={[1]}>
                 <EntityGroupManagement />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/settings/entity-policies"
+            element={
+              <ProtectedRoute allowedLevels={[1]}>
+                <PolicyTemplateManagement />
               </ProtectedRoute>
             }
           />

@@ -7,6 +7,8 @@ import { useAuth } from "../hooks/useAuth";
 import { useTranslation } from "react-i18next";
 import apiClient from "../api/client";
 import LanguageToggle from "./LanguageToggle";
+import { useInternalPolicyUrl } from "../hooks/useInternalPolicyUrl";
+import { FileText, ExternalLink } from "lucide-react";
 
 // Icons
 const DashboardIcon = () => (
@@ -224,6 +226,7 @@ export default function Layout({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { url: policyUrl, label: policyLabel } = useInternalPolicyUrl();
   const { t } = useTranslation();
 
   // Desktop: sidebar can be collapsed
@@ -402,6 +405,12 @@ export default function Layout({ children }) {
         icon: BuildingIcon,
         type: "link",
       });
+      navItems.push({
+        path: "/settings/entity-policies",
+        label: "Entity Policies",
+        icon: BuildingIcon,
+        type: "link",
+      });
     }
 
     // Only add Approval dropdown if there are children
@@ -438,11 +447,13 @@ export default function Layout({ children }) {
   }
 
   // INTERNAL POLICY (All users)
+  // policyUrl defaults to the company-wide URL immediately (no flicker).
+  // If the entity/group has a custom URL configured it overrides after API resolves.
   navItems.push({
     label: t("nav.internalPolicy"),
     icon: DocumentIcon,
     type: "external",
-    href: "https://rhayaflicks.com/internalpolicy/",
+    href: policyUrl || "https://rhayaflicks.com/internalpolicy/",
   });
 
   // Sidebar Content Component (reused for mobile and desktop)

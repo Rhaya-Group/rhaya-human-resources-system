@@ -20,6 +20,7 @@ import documentRoutes from "./routes/document.routes.js";
 import internalRoutes from "./routes/internal.routes.js";
 import offboardingRoutes from "./routes/offboarding.routes.js";
 import entityGroupRoutes from "./routes/entityGroup.routes.js";
+import policyTemplateRoutes from "./routes/policyTemplate.routes.js";
 
 // Import middleware
 import { authenticateToken } from "./middleware/auth.js";
@@ -39,6 +40,7 @@ const PORT = process.env.PORT || 3000;
 // CORS Configuration - Production Ready
 const allowedOrigins = [
   "http://localhost:5173", // Development
+  "http://localhost:3000", // Development
   "https://polyphyodont-dannielle-semiadhesive.ngrok-free.dev", // Development
   "https://rhaya-human-resources-system.pages.dev", // Production
   process.env.FRONTEND_URL, // From Railway env var
@@ -159,6 +161,8 @@ app.use("/internal", internalRoutes);
 app.use("/api/offboarding", offboardingRoutes);
 
 app.use("/api/entity-groups", entityGroupRoutes);
+
+app.use("/api/policy-templates", policyTemplateRoutes);
 // ============================================
 // ERROR HANDLING
 // ============================================

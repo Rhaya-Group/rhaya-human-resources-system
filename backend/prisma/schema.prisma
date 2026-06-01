@@ -75,6 +75,7 @@ model User {
   role                                                  Role                   @relation(fields: [roleId], references: [id])
   supervisor                                            User?                  @relation("Supervision", fields: [supervisorId], references: [id], onUpdate: NoAction)
   subordinates                                          User[]                 @relation("Supervision")
+  step1ApprovedLeaves                                   LeaveRequest[]         @relation("LeaveStep1Approver")
 
   @@index([email])
   @@index([username])
@@ -123,6 +124,7 @@ model PlottingCompany {
   group       EntityGroup?       @relation(fields: [groupId], references: [id])
   auditLogs   EntityGroupAudit[]
   users       User[]
+  policyAssignments  PolicyAssignment[]  @relation("EntityPolicyAssignments")
 
   @@map("PlottingCompany")
 }
@@ -140,6 +142,7 @@ model EntityGroup {
   companies   PlottingCompany[]
   auditLogs   EntityGroupAudit[]
   manager     User?              @relation("GroupManager", fields: [managerId], references: [id])
+  policyAssignments  PolicyAssignment[]  @relation("GroupPolicyAssignments")
 
   @@map("entity_groups")
 }
@@ -162,6 +165,98 @@ model EntityGroupAudit {
   @@index([groupId])
   @@index([createdAt])
   @@map("entity_group_audit")
+}
+
+// ─── PolicyTemplate ───────────────────────────────────────────────────────────
+// Defines a named set of business rules.
+// Has NO direct scope — scope is defined by PolicyAssignment rows.
+// One template can be assigned to many entities/groups.
+
+model PolicyTemplate {
+  id    String  @id @default(cuid())
+  name  String                         // e.g. "KGI Standard", "Rhaya Flicks Policy"
+  description String?
+
+  // ── Overtime ─────────────────────────────────────────────────────────────
+  // "pre"  = submit plan BEFORE overtime (KGI)
+  // "post" = submit AFTER within window  (Rhaya)
+  overtimeMode                  String  @default("post")
+  overtimeSubmissionWindowDays  Int     @default(7)
+  overtimeAllowLateSubmission   Boolean @default(false)
+
+  // ── Leave ─────────────────────────────────────────────────────────────────
+  // 1 = single step, 2 = two-step
+  leaveApprovalSteps    Int    @default(1)
+  leaveStep1Approvers   String @default("supervisor,dept_head,hr")
+  leaveStep2Approvers   String @default("hr")
+
+  // ── Pay rates ─────────────────────────────────────────────────────────────
+  overtimeRateWeekday   Float @default(1.5)
+  overtimeRateWeekend   Float @default(2.0)
+  overtimeRateHoliday   Float @default(3.0)
+
+  // ── Attendance ────────────────────────────────────────────────────────────
+  lateToleranceMinutes  Int   @default(15)
+
+  // ── Internal policy document ──────────────────────────────────────────────
+  internalPolicyUrl     String?
+
+  // ── Metadata ──────────────────────────────────────────────────────────────
+  isActive  Boolean  @default(true)
+  notes     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignments PolicyAssignment[]
+
+  @@map("policy_templates")
+}
+
+// ─── PolicyAssignment ─────────────────────────────────────────────────────────
+// Links a PolicyTemplate to a target (entity OR group).
+// Priority controls conflict resolution when multiple assignments match.
+// HIGHER number = higher priority (wins).
+//
+// Example:
+//   KGI group assigned template "KGI Standard"      priority 10
+//   Entity A  assigned template "Entity A Override"  priority 20  ← wins for Entity A
+//
+// Conflict resolution in policyResolver:
+//   1. Collect all assignments that apply to the entity (direct + via group)
+//   2. Sort by priority DESC
+//   3. Take highest priority — that template's rules win entirely
+//      (no field-level merging between templates; one template wins)
+
+model PolicyAssignment {
+  id          String  @id @default(cuid())
+
+  templateId  String
+  template    PolicyTemplate @relation(fields: [templateId], references: [id])
+
+  // Target — exactly one of these is set
+  entityId      String?
+  entityGroupId String?
+
+  // Higher = wins when multiple assignments match the same entity
+  priority    Int     @default(10)
+
+  // Optional label override for this specific assignment
+  label       String?
+
+  isActive    Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  entity       PlottingCompany? @relation("EntityPolicyAssignments", fields: [entityId],      references: [id])
+  entityGroup  EntityGroup?     @relation("GroupPolicyAssignments",  fields: [entityGroupId], references: [id])
+
+  // Prevent duplicate assignments of same template to same target
+  @@unique([templateId, entityId])
+  @@unique([templateId, entityGroupId])
+
+  @@map("policy_assignments")
 }
 
 model LeaveBalance {
@@ -217,6 +312,10 @@ model LeaveRequest {
   employee            User           @relation(fields: [employeeId], references: [id])
   supervisor          User?          @relation("LeaveSupervisor", fields: [supervisorId], references: [id])
   toilEntry           TimeOffInLieu?
+
+  step1ApprovedById  String?
+  step1ApprovedAt    DateTime?
+  step1ApprovedBy    User?  @relation("LeaveStep1Approver", fields: [step1ApprovedById], references: [id])
 
   @@map("LeaveRequest")
 }
