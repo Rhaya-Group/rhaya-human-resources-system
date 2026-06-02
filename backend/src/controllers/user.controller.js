@@ -934,6 +934,7 @@ export const updateUserProfile = async (req, res) => {
 export const deactivateUser = async (req, res) => {
   try {
     const { userId } = req.params;
+    const { accessLevel, scopeEntityIds } = req.user;
 
     console.log("Deactivate request for user:", userId);
 
@@ -1152,6 +1153,7 @@ export const adjustUserBalance = async (req, res) => {
   try {
     const { userId } = req.params;
     const { overtime, leave, toil } = req.body;
+    const { accessLevel, scopeEntityIds } = req.user;
 
     // Check user exists
     const currentYear = new Date().getFullYear();
@@ -1170,7 +1172,7 @@ export const adjustUserBalance = async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    if (req.user.accessLevel === 2) {
+    if (accessLevel === 2) {
       if (
         user.plottingCompanyId &&
         !scopeEntityIds?.includes(user.plottingCompanyId)
