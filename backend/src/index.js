@@ -21,6 +21,7 @@ import internalRoutes from "./routes/internal.routes.js";
 import offboardingRoutes from "./routes/offboarding.routes.js";
 import entityGroupRoutes from "./routes/entityGroup.routes.js";
 import policyTemplateRoutes from "./routes/policyTemplate.routes.js";
+import entitySubgroupRoutes from "./routes/entitySubgroup.routes.js";
 
 // Import middleware
 import { authenticateToken } from "./middleware/auth.js";
@@ -161,6 +162,8 @@ app.use("/internal", internalRoutes);
 app.use("/api/offboarding", offboardingRoutes);
 
 app.use("/api/entity-groups", entityGroupRoutes);
+
+app.use("/api/entity-subgroups", entitySubgroupRoutes);
 
 app.use("/api/policy-templates", policyTemplateRoutes);
 // ============================================

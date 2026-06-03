@@ -406,6 +406,12 @@ export default function Layout({ children }) {
         type: "link",
       });
       navItems.push({
+        path: "/settings/entity-subgroups",
+        label: "Entity sub-groups",
+        icon: BuildingIcon,
+        type: "link",
+      });
+      navItems.push({
         path: "/settings/entity-policies",
         label: "Entity Policies",
         icon: Shield,

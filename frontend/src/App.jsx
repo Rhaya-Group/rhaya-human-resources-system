@@ -31,6 +31,7 @@ import LeaveDetail from "./pages/LeaveDetail";
 import CompanyDivisionManagement from "./pages/CompanyDivisionManagement";
 import EntityGroupManagement from "./pages/EntityGroupManagement";
 import PolicyTemplateManagement from "./pages/PolicyTemplateManagement";
+import EntitySubgroupManagement from "./pages/EntitySubgroupManagement";
 
 // Layout
 import Layout from "./components/Layout";
@@ -271,6 +272,15 @@ function App() {
             element={
               <ProtectedRoute allowedLevels={[1]}>
                 <PolicyTemplateManagement />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/settings/entity-subgroups"
+            element={
+              <ProtectedRoute allowedLevels={[1]}>
+                <EntitySubgroupManagement />
               </ProtectedRoute>
             }
           />

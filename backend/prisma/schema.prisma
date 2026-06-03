@@ -125,6 +125,8 @@ model PlottingCompany {
   auditLogs   EntityGroupAudit[]
   users       User[]
   policyAssignments  PolicyAssignment[]  @relation("EntityPolicyAssignments")
+  subgroupId  String?
+  subgroup    EntitySubgroup?  @relation(fields: [subgroupId], references: [id])
 
   @@map("PlottingCompany")
 }
@@ -143,6 +145,7 @@ model EntityGroup {
   auditLogs   EntityGroupAudit[]
   manager     User?              @relation("GroupManager", fields: [managerId], references: [id])
   policyAssignments  PolicyAssignment[]  @relation("GroupPolicyAssignments")
+  subgroups  EntitySubgroup[]
 
   @@map("entity_groups")
 }
@@ -165,6 +168,25 @@ model EntityGroupAudit {
   @@index([groupId])
   @@index([createdAt])
   @@map("entity_group_audit")
+}
+
+model EntitySubgroup {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  code        String?  @unique
+  description String?
+  color       String?  @default("#6366F1")
+  isActive    Boolean  @default(true)
+
+  groupId     String
+  group       EntityGroup       @relation(fields: [groupId], references: [id])
+  companies   PlottingCompany[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([groupId])
+  @@map("entity_subgroups")
 }
 
 // ─── PolicyTemplate ───────────────────────────────────────────────────────────
