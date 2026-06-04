@@ -23,6 +23,8 @@ import entityGroupRoutes from "./routes/entityGroup.routes.js";
 import policyTemplateRoutes from "./routes/policyTemplate.routes.js";
 import entitySubgroupRoutes from "./routes/entitySubgroup.routes.js";
 
+import leaveReminderTestRoutes from "./routes/leaveReminderTest.routes.js";
+
 // Import middleware
 import { authenticateToken } from "./middleware/auth.js";
 
@@ -153,6 +155,7 @@ app.use("/api/overtime-recap", overtimeRecapRoutes);
 app.use("/api/payslips", payslipRoutes);
 app.use("/api/plotting-companies", plottingCompanyRoutes);
 app.use("/api/users/:userId/documents", documentRoutes);
+app.use("/api/admin/leave-reminder", leaveReminderTestRoutes);
 
 // Static file serving for uploads (protected)
 app.use("/uploads", authenticateToken, express.static("uploads"));
