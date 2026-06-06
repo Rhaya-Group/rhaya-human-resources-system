@@ -2936,7 +2936,7 @@ export default function UserManagement() {
                         <input
                           type="number"
                           min="0"
-                          step="1000"
+                          step=".01"
                           value={formData.overtimeRate}
                           onChange={(e) =>
                             setFormData({
