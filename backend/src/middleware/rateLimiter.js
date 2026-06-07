@@ -1,5 +1,5 @@
 // backend/src/middleware/rateLimiter.js
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 
 /**
  * Rate limiter for login endpoint
@@ -81,35 +81,29 @@ export const generalLimiter = rateLimit({
 });
 
 /**
- * Rate limiter for internal API endpoints
- * Limits requests per client (identified by X-Client-Id or IP)
+ * Rate limiter for internal API endpoints (HMAC-authenticated)
+ * Limits requests per client (X-Client-Id) or IP
  */
 export const internalApiLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 100, // 100 requests per minute per client
 
-  // Use client ID if authenticated, otherwise IP
+  // Use clientId for HMAC clients, ipKeyGenerator for IP fallback
   keyGenerator: (req) => {
-    return req.clientId || req.ip;
+    if (req.clientId) return req.clientId;
+    return ipKeyGenerator(req);
   },
 
-  // Custom message
   message: {
     error: "Too many requests from this client",
     retryAfter: 60,
   },
 
-  // Standard headers
   standardHeaders: true,
   legacyHeaders: false,
-
-  // Skip successful requests from counting (optional - be more lenient)
   skipSuccessfulRequests: false,
-
-  // Skip failed requests from counting (optional)
   skipFailedRequests: false,
 
-  // Custom handler for when limit is exceeded
   handler: (req, res) => {
     console.warn("[RateLimit] Limit exceeded", {
       clientId: req.clientId || "unknown",
@@ -128,13 +122,15 @@ export const internalApiLimiter = rateLimit({
 
 /**
  * Stricter rate limiter for resource-intensive endpoints
- * (e.g., full employee list without filters)
  */
 export const strictInternalApiLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 20, // 20 requests per minute
 
-  keyGenerator: (req) => req.clientId || req.ip,
+  keyGenerator: (req) => {
+    if (req.clientId) return req.clientId;
+    return ipKeyGenerator(req);
+  },
 
   message: {
     error: "Rate limit exceeded for this endpoint",
