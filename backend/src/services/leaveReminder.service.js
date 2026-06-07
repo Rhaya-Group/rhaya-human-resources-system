@@ -287,19 +287,25 @@ async function sendReminderForLeave(leave, daysUntilLeave = 7, dryRun = false) {
       );
     }
   } else if (plottingCompanyId && !subgroup) {
-    const entityDivisions = await prisma.division.findMany({
-      where: {
-        headId: { not: null },
-        head: {
+    const allDivisions = await prisma.division.findMany({
+      where: { headId: { not: null } },
+      select: { headId: true },
+    });
+    const allHeadIds = allDivisions.map((d) => d.headId).filter(Boolean);
+
+    if (allHeadIds.length > 0) {
+      const entityHeads = await prisma.user.findMany({
+        where: {
+          id: { in: allHeadIds },
           plottingCompanyId,
           employeeStatus: { not: "INACTIVE" },
         },
-      },
-      select: { head: { select: { email: true } } },
-    });
-    entityDivisions.forEach((d) => {
-      if (d.head?.email) ccEmails.add(d.head.email);
-    });
+        select: { email: true, name: true },
+      });
+      entityHeads.forEach((u) => {
+        if (u.email) ccEmails.add(u.email);
+      });
+    }
   }
 
   if (toRecipient.email !== hrEmail) {
