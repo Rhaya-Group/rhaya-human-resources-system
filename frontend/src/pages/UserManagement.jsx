@@ -2931,7 +2931,7 @@ export default function UserManagement() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Overtime Rate (IDR/hour)
+                          Overtime Rate (IDR/8 hour)
                         </label>
                         <input
                           type="number"
