@@ -223,6 +223,14 @@ model PolicyTemplate {
   // ── Internal policy document ──────────────────────────────────────────────
   internalPolicyUrl     String?
 
+  // ── HR contact & SMTP profile ─────────────────────────────────────────────
+  // hrEmail: designated HR email for notifications tied to this policy
+  hrEmail      String?
+  // smtpProfile: key that maps to env var group SMTP2GO_{KEY}_USER / PASS / FROM_EMAIL / FROM_NAME
+  //   e.g. "kgi"  → SMTP2GO_KGI_USER, SMTP2GO_KGI_PASS, SMTP2GO_KGI_FROM_EMAIL, SMTP2GO_KGI_FROM_NAME
+  //   null / "default" → falls back to SMTP2GO_USER / SMTP2GO_PASS / etc.
+  smtpProfile  String?
+
   // ── Metadata ──────────────────────────────────────────────────────────────
   isActive  Boolean  @default(true)
   notes     String?
@@ -374,6 +382,9 @@ model OvertimeRequest {
   recap               OvertimeRecap?     @relation(fields: [recapId], references: [id])
   supervisor          User?              @relation("OvertimeSupervisor", fields: [supervisorId], references: [id])
   revisions           OvertimeRevision[]
+  overtimeMode        String   @default("post")
+  isIncidental        Boolean  @default(false)
+  incidentalReason    String?
 
   @@index([employeeId])
   @@index([status])
@@ -386,6 +397,9 @@ model OvertimeEntry {
   overtimeRequestId String
   date              DateTime
   hours             Float
+  plannedHours      Float?     // original estimate in pre-flow plan
+  actualHours       Float?     // filled during actualization step
+  actualizedAt      DateTime?  // when employee actualized this entry
   description       String
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt

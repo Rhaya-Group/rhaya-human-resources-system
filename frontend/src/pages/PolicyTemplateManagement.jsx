@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import {
   Shield, Plus, Edit2, Trash2, ChevronDown, ChevronUp,
-  Link, Tag, Building2, Users, X, Info,
+  Link, Tag, Building2, Users, X, Info, Mail, Server,
 } from 'lucide-react';
 import apiClient from '../api/client';
 
@@ -28,6 +28,8 @@ const BLANK_TEMPLATE = {
   overtimeRateHoliday: 3.0,
   lateToleranceMinutes: 15,
   internalPolicyUrl: '',
+  hrEmail: '',
+  smtpProfile: '',
   notes: '',
 };
 
@@ -223,6 +225,16 @@ function TemplateCard({ template, onEdit, onDelete, onAssign, onDeleteAssignment
                 <Link className="w-3 h-3" /> Policy URL set
               </span>
             )}
+            {template.hrEmail && (
+              <span className="px-2 py-0.5 bg-pink-100 text-pink-700 rounded flex items-center gap-1">
+                <Mail className="w-3 h-3" /> {template.hrEmail}
+              </span>
+            )}
+            {template.smtpProfile && (
+              <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded flex items-center gap-1">
+                <Server className="w-3 h-3" /> SMTP: {template.smtpProfile}
+              </span>
+            )}
           </div>
         </div>
 
@@ -372,6 +384,8 @@ function TemplateModal({ editing, onClose, onSaved }) {
         overtimeRateHoliday:          editing.overtimeRateHoliday,
         lateToleranceMinutes:         editing.lateToleranceMinutes,
         internalPolicyUrl:            editing.internalPolicyUrl || '',
+        hrEmail:                      editing.hrEmail || '',
+        smtpProfile:                  editing.smtpProfile || '',
         notes:                        editing.notes || '',
       }
     : { ...BLANK_TEMPLATE }
@@ -400,6 +414,8 @@ function TemplateModal({ editing, onClose, onSaved }) {
       overtimeRateHoliday:          Number(form.overtimeRateHoliday),
       lateToleranceMinutes:         Number(form.lateToleranceMinutes),
       internalPolicyUrl:            form.internalPolicyUrl || null,
+      hrEmail:                      form.hrEmail || null,
+      smtpProfile:                  form.smtpProfile || null,
     };
 
     try {
@@ -574,6 +590,50 @@ function TemplateModal({ editing, onClose, onSaved }) {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
               <p className="text-xs text-gray-400 mt-1">Shown in sidebar for employees under this template.</p>
             </div>
+
+            <hr />
+
+            {/* HR Contact & SMTP */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <Mail className="w-4 h-4 text-pink-500" />
+                HR Contact & Email
+              </h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">
+                    HR Email for notifications
+                  </label>
+                  <input
+                    type="email"
+                    value={form.hrEmail}
+                    onChange={e => set('hrEmail', e.target.value)}
+                    placeholder="hr@company.com"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    Notification emails for leave / overtime under this policy go to this address.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1 flex items-center gap-1">
+                    <Server className="w-3 h-3" /> SMTP Profile key
+                  </label>
+                  <input
+                    type="text"
+                    value={form.smtpProfile}
+                    onChange={e => set('smtpProfile', e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                    placeholder="e.g. kgi  →  SMTP2GO_KGI_USER / PASS"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    Maps to env vars <code className="bg-gray-100 px-1 rounded">SMTP2GO_{'<KEY>'}_USER</code> / <code className="bg-gray-100 px-1 rounded">SMTP2GO_{'<KEY>'}_PASS</code> / <code className="bg-gray-100 px-1 rounded">FROM_EMAIL</code>.
+                    Leave blank to use default SMTP account.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <div>
               <label className="block text-xs text-gray-500 mb-1">Notes</label>
               <textarea rows={2} value={form.notes} onChange={e => set('notes', e.target.value)}
