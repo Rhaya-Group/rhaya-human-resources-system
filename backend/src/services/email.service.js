@@ -255,7 +255,7 @@ function getOvertimeDescription(overtimeRequest) {
 /**
  * Send overtime approval email
  */
-export async function sendOvertimeApprovedEmail(user, overtimeRequest) {
+export async function sendOvertimeApprovedEmail(user, overtimeRequest, { smtpProfile, hrEmail } = {}) {
   const overtimeDate = getOvertimeDate(overtimeRequest);
   const overtimeHours = getOvertimeHours(overtimeRequest);
   const description = getOvertimeDescription(overtimeRequest);
@@ -478,16 +478,17 @@ export async function sendOvertimeApprovedEmail(user, overtimeRequest) {
 
   return sendEmail({
     to: user.email,
-    cc: process.env.HR_EMAIL || "hr@rhayaflicks.com", // CC to HR
+    cc: hrEmail || process.env.HR_EMAIL || "hr@rhayaflicks.com",
     subject: "Overtime Request Approved",
     html: html,
+    smtpProfile,
   });
 }
 
 /**
  * Send overtime rejection email
  */
-export async function sendOvertimeRejectedEmail(user, overtimeRequest) {
+export async function sendOvertimeRejectedEmail(user, overtimeRequest, { smtpProfile, hrEmail } = {}) {
   const overtimeDate = getOvertimeDate(overtimeRequest);
   const overtimeHours = getOvertimeHours(overtimeRequest);
   const description = getOvertimeDescription(overtimeRequest);
@@ -687,9 +688,10 @@ export async function sendOvertimeRejectedEmail(user, overtimeRequest) {
 
   return sendEmail({
     to: user.email,
-    cc: process.env.HR_EMAIL || "hr@rhayaflicks.com", // CC to HR
+    cc: hrEmail || process.env.HR_EMAIL || "hr@rhayaflicks.com",
     subject: "Overtime Request - Not Approved",
     html: html,
+    smtpProfile,
   });
 }
 
@@ -1213,6 +1215,7 @@ export async function sendOvertimeRequestNotification(
   approver,
   overtimeRequest,
   employee,
+  { smtpProfile, hrEmail } = {},
 ) {
   const overtimeHours = getOvertimeHours(overtimeRequest);
   const description = getOvertimeDescription(overtimeRequest);
@@ -1512,10 +1515,11 @@ PT Rhayakan Film Indonesia
 
   return sendEmail({
     to: approver.email,
-    cc: process.env.HR_EMAIL || "hr@rhayaflicks.com", // CC to HR
+    cc: hrEmail || process.env.HR_EMAIL || "hr@rhayaflicks.com",
     subject: `[Action Required] Overtime Approval Request from ${employee.name}`,
     html: html,
     text: text,
+    smtpProfile,
   });
 }
 
@@ -1527,6 +1531,7 @@ export async function sendOvertimeRevisionRequestedEmail(
   overtimeRequest,
   revisionComment,
   approverName,
+  { smtpProfile, hrEmail } = {},
 ) {
   const overtimeHours = getOvertimeHours(overtimeRequest);
   const systemUrl = process.env.FRONTEND_URL || "http://localhost:5173";
@@ -1819,10 +1824,11 @@ PT Rhayakan Film Indonesia
 
   return sendEmail({
     to: employee.email,
-    cc: process.env.HR_EMAIL || "hr@rhayaflicks.com", // CC to HR
+    cc: hrEmail || process.env.HR_EMAIL || "hr@rhayaflicks.com",
     subject: `[Action Required] Overtime Revision Requested`,
     html: html,
     text: text,
+    smtpProfile,
   });
 }
 
@@ -4174,6 +4180,7 @@ export async function sendAdminRejectOvertimeEmail(
   adminReason,
   adminName,
   ccEmails = [],
+  { smtpProfile, hrEmail } = {},
 ) {
   try {
     // Format dates and amounts
@@ -4474,6 +4481,7 @@ export async function sendAdminRejectOvertimeEmail(
           : undefined,
       subject: `Overtime Rejected by HR Admin: ${overtimeRequest.totalHours} hours`,
       html: html,
+      smtpProfile,
     });
   } catch (error) {
     console.error("❌ Send admin rejection email error:", error);
@@ -4488,7 +4496,7 @@ export async function sendAdminRejectOvertimeEmail(
  * @param {Object} user            - The employee (to recipient)
  * @param {Object} overtimeRequest - The overtime request (must include entries[])
  */
-export async function sendOvertimePlanApprovedEmail(user, overtimeRequest) {
+export async function sendOvertimePlanApprovedEmail(user, overtimeRequest, { smtpProfile, hrEmail } = {}) {
   const entries = overtimeRequest.entries || [];
   const totalHours = overtimeRequest.totalHours || 0;
   const submittedAt = new Date(
@@ -4595,9 +4603,10 @@ export async function sendOvertimePlanApprovedEmail(user, overtimeRequest) {
 
   return sendEmail({
     to: user.email,
-    cc: process.env.HR_EMAIL || "hr@rhayaflicks.com",
+    cc: hrEmail || process.env.HR_EMAIL || "hr@rhayaflicks.com",
     subject: "Overtime Plan Approved — Please Actualize After Completion",
     html,
+    smtpProfile,
   });
 }
 
@@ -4611,6 +4620,7 @@ export async function sendOvertimePlanApprovedEmail(user, overtimeRequest) {
 export async function sendOvertimeActualizationNeededEmail(
   user,
   overtimeRequest,
+  { smtpProfile, hrEmail } = {},
 ) {
   const entries = overtimeRequest.entries || [];
   const totalHours = overtimeRequest.totalHours || 0;
@@ -4743,9 +4753,10 @@ export async function sendOvertimeActualizationNeededEmail(
 
   return sendEmail({
     to: user.email,
-    cc: process.env.HR_EMAIL || "hr@rhayaflicks.com",
+    cc: hrEmail || process.env.HR_EMAIL || "hr@rhayaflicks.com",
     subject: `Action Required: Actualize Your Overtime by ${deadlineStr}`,
     html,
+    smtpProfile,
   });
 }
 

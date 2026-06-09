@@ -251,6 +251,7 @@ export const submitOvertimeRequest = async (req, res) => {
           approver,
           overtimeRequest,
           employee,
+          { smtpProfile: policy.smtpProfile, hrEmail: policy.hrEmail },
         );
       }
     } catch (emailErr) {
@@ -345,7 +346,12 @@ export const approvePlan = async (req, res) => {
 
     // Notify employee that plan is approved
     try {
-      await sendOvertimePlanApprovedEmail(request.employee, updated);
+      const { getEntityPolicy } = await import("../helpers/policyResolver.js");
+      const policy = await getEntityPolicy(request.employee?.plottingCompanyId);
+      await sendOvertimePlanApprovedEmail(request.employee, updated, {
+        smtpProfile: policy.smtpProfile,
+        hrEmail: policy.hrEmail,
+      });
     } catch (emailErr) {
       console.error("⚠️ Plan approval email failed:", emailErr.message);
     }
@@ -629,7 +635,12 @@ export async function moveExpiredPlansToActualization() {
 
     // Notify employee they need to actualize
     try {
-      await sendOvertimeActualizationNeededEmail(plan.employee, plan);
+      const { getEntityPolicy } = await import("../helpers/policyResolver.js");
+      const policy = await getEntityPolicy(plan.employee?.plottingCompanyId);
+      await sendOvertimeActualizationNeededEmail(plan.employee, plan, {
+        smtpProfile: policy.smtpProfile,
+        hrEmail: policy.hrEmail,
+      });
     } catch (emailErr) {
       console.error(
         `[ActualizationCheck] Email failed for ${plan.id}:`,
@@ -1251,7 +1262,12 @@ export const approveOvertimeRequest = async (req, res) => {
 
     // Send email notification
     try {
-      await sendOvertimeApprovedEmail(request.employee, request);
+      const { getEntityPolicy } = await import("../helpers/policyResolver.js");
+      const policy = await getEntityPolicy(request.employee?.plottingCompanyId);
+      await sendOvertimeApprovedEmail(request.employee, request, {
+        smtpProfile: policy.smtpProfile,
+        hrEmail: policy.hrEmail,
+      });
       console.log("Approval email sent to:", request.employee.email);
     } catch (emailError) {
       // Don't fail the request if email fails
@@ -1412,12 +1428,12 @@ export const rejectOvertimeRequest = async (req, res) => {
 
     // Send rejection email notification to employee
     try {
-      await sendOvertimeRejectedEmail(
-        updatedRequest.employee,
-        updatedRequest,
-        comment,
-        req.user.name,
-      );
+      const { getEntityPolicy } = await import("../helpers/policyResolver.js");
+      const policy = await getEntityPolicy(request.employee?.plottingCompanyId);
+      await sendOvertimeRejectedEmail(updatedRequest.employee, updatedRequest, {
+        smtpProfile: policy.smtpProfile,
+        hrEmail: policy.hrEmail,
+      });
       console.log("Rejection email sent to:", updatedRequest.employee.email);
     } catch (emailError) {
       // Don't fail the request if email fails
@@ -1562,11 +1578,14 @@ export const requestRevision = async (req, res) => {
 
     // Send revision request email notification to employee
     try {
+      const { getEntityPolicy } = await import("../helpers/policyResolver.js");
+      const policy = await getEntityPolicy(request.employee?.plottingCompanyId);
       await sendOvertimeRevisionRequestedEmail(
         updatedRequest.employee,
         updatedRequest,
         comment,
         req.user.name,
+        { smtpProfile: policy.smtpProfile, hrEmail: policy.hrEmail },
       );
       console.log(
         "Revision request email sent to:",
@@ -1923,6 +1942,10 @@ export const adminRejectApprovedOvertime = async (req, res) => {
     try {
       const { sendAdminRejectOvertimeEmail } =
         await import("../services/email.service.js");
+      const { getEntityPolicy } = await import("../helpers/policyResolver.js");
+      const policy = await getEntityPolicy(
+        overtimeRequest.employee?.plottingCompanyId,
+      );
 
       // Send to employee, supervisor, and HR
       await sendAdminRejectOvertimeEmail(
@@ -1933,8 +1956,9 @@ export const adminRejectApprovedOvertime = async (req, res) => {
         [
           overtimeRequest.supervisor?.email,
           overtimeRequest.finalApprover?.email,
-          process.env.HR_EMAIL,
+          policy.hrEmail || process.env.HR_EMAIL,
         ].filter((email) => email), // Remove nulls
+        { smtpProfile: policy.smtpProfile, hrEmail: policy.hrEmail },
       );
       console.log(`Admin rejection notification emails sent`);
     } catch (emailError) {
