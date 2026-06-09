@@ -131,11 +131,11 @@ router.get("/entities", hmacAuth, async (req, res, next) => {
             isActive: true,
           },
         },
-        _count: {
-          select: {
-            users: true,
-          },
-        },
+        // _count: {
+        //   select: {
+        //     users: true,
+        //   },
+        // },
       },
       orderBy: { code: "asc" },
     });
