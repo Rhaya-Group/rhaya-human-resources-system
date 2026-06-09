@@ -1,13 +1,15 @@
 // backend/src/controllers/overtime.controller.js
 import * as overtimeService from "../services/overtime.service.js";
 import * as revisionService from "../services/overtimeRevision.service.js";
-import { isAfter, subDays, startOfDay } from "date-fns";
+import { isAfter, isBefore, subDays, startOfDay, endOfDay } from "date-fns";
 import { PrismaClient } from "@prisma/client";
 import {
   sendOvertimeApprovedEmail,
   sendOvertimeRejectedEmail,
   sendOvertimeRequestNotification,
   sendOvertimeRevisionRequestedEmail,
+  sendOvertimePlanApprovedEmail,
+  sendOvertimeActualizationNeededEmail,
 } from "../services/email.service.js";
 const prisma = new PrismaClient();
 
@@ -27,161 +29,622 @@ const prisma = new PrismaClient();
  */
 export const submitOvertimeRequest = async (req, res) => {
   try {
-    const { entries } = req.body;
+    const { entries, incidentalReason } = req.body;
     const employeeId = req.user.id;
 
-    // Validation
+    // ── Basic validation ────────────────────────────────────────────────────
     if (!entries || !Array.isArray(entries) || entries.length === 0) {
       return res
         .status(400)
         .json({ error: "At least one overtime entry is required" });
     }
 
-    // Validate each entry
-    const today = startOfDay(new Date());
-    const sevenDaysAgo = subDays(today, 7);
-
     for (const entry of entries) {
-      // Check required fields
       if (!entry.date || !entry.hours || !entry.description) {
         return res.status(400).json({
           error: "Each entry must have date, hours, and description",
         });
       }
-
-      // Validate hours (max 12 per day)
       if (entry.hours <= 0 || entry.hours > 12) {
         return res.status(400).json({
-          error: `Invalid hours for ${entry.date}. Must be between 0.5 and 12 hours`,
-        });
-      }
-
-      // Check 7-day deadline
-      const entryDate = startOfDay(new Date(entry.date));
-      if (isAfter(sevenDaysAgo, entryDate)) {
-        return res.status(400).json({
-          error: `Date ${entry.date} is more than 7 days ago. Cannot submit.`,
-        });
-      }
-
-      // Check future date
-      if (isAfter(entryDate, today)) {
-        return res.status(400).json({
-          error: `Date ${entry.date} is in the future. Cannot submit.`,
+          error: `Invalid hours for ${entry.date}. Must be between 0.5 and 12`,
         });
       }
     }
 
-    const settings = await prisma.systemSettings.findUnique({
-      where: { id: "system-settings-singleton" },
-    });
+    // ── Get employee + policy ───────────────────────────────────────────────
+    const employee = await overtimeService.getEmployeeData(employeeId);
+    const { getEntityPolicy } = await import("../helpers/policyResolver.js");
+    const policy = await getEntityPolicy(employee.plottingCompanyId);
+    const mode = policy.overtimeMode; // "post" | "pre"
 
-    if (settings?.lastRecapDate) {
-      for (const entry of entries) {
-        const entryDate = new Date(entry.date);
-        if (entryDate <= settings.lastRecapDate) {
+    const today = startOfDay(new Date());
+    const sevenDaysAgo = subDays(today, 7);
+
+    // ── Classify dates ──────────────────────────────────────────────────────
+    const entryDates = entries.map((e) => startOfDay(new Date(e.date)));
+    const allFuture = entryDates.every((d) => isAfter(d, today));
+    const allPastOrToday = entryDates.every((d) => !isAfter(d, today));
+
+    // ── Determine sub-flow ──────────────────────────────────────────────────
+    // flow1      → POST mode, always past dates
+    // flow2a     → PRE mode, all future dates → planned overtime
+    // flow2b     → PRE mode, past dates → incidental (no prior plan)
+    let subFlow;
+
+    if (mode === "post") {
+      subFlow = "flow1";
+    } else if (mode === "pre" && allFuture) {
+      subFlow = "flow2a"; // planned
+    } else if (mode === "pre" && allPastOrToday) {
+      subFlow = "flow2b"; // incidental
+    } else {
+      return res.status(400).json({
+        error: "Cannot mix past and future dates in a single request",
+      });
+    }
+
+    // ── Flow-specific date validation ───────────────────────────────────────
+
+    if (subFlow === "flow1" || subFlow === "flow2b") {
+      // Past dates only — same H+7 window for both
+      for (let i = 0; i < entries.length; i++) {
+        const d = entryDates[i];
+        if (isAfter(d, today)) {
           return res.status(400).json({
-            // error: `Lembur untuk tanggal ${formatDate(entryDate)} sudah direkap.`
+            error: `${entries[i].date} is in the future. Use planned overtime for future dates.`,
+          });
+        }
+        if (isBefore(d, sevenDaysAgo)) {
+          return res.status(400).json({
+            error: `${entries[i].date} is more than 7 days ago. Cannot submit.`,
           });
         }
       }
     }
 
-    // Check for duplicate dates in this submission
+    // flow2b requires a justification reason
+    if (subFlow === "flow2b") {
+      if (!incidentalReason || !incidentalReason.trim()) {
+        return res.status(400).json({
+          error:
+            "incidentalReason is required for incidental overtime. Please explain why a plan was not submitted.",
+        });
+      }
+    }
+
+    // future dates: no H+7 check needed for flow2a
+
+    // ── Check recap lock (only for past-date flows) ─────────────────────────
+    if (subFlow === "flow1" || subFlow === "flow2b") {
+      const settings = await prisma.systemSettings.findUnique({
+        where: { id: "system-settings-singleton" },
+      });
+      if (settings?.lastRecapDate) {
+        for (const entry of entries) {
+          const entryDate = new Date(entry.date);
+          if (entryDate <= settings.lastRecapDate) {
+            return res.status(400).json({
+              error: `Date ${entry.date} has already been recapped.`,
+            });
+          }
+        }
+      }
+    }
+
+    // ── Duplicate date check ────────────────────────────────────────────────
     const dates = entries.map((e) => e.date);
     const uniqueDates = new Set(dates);
     if (dates.length !== uniqueDates.size) {
       return res.status(400).json({
-        error: "Duplicate dates found in submission. Each date must be unique.",
+        error: "Duplicate dates in submission. Each date must be unique.",
       });
     }
 
-    // Check for duplicate dates in existing requests (PENDING or APPROVED)
-    const existingDates = await overtimeService.checkDuplicateDates(
-      employeeId,
-      dates,
-    );
-    if (existingDates.length > 0) {
+    // For past-date flows, check against existing PENDING/APPROVED requests
+    // For flow2a, check against existing plans (PLAN_PENDING / PLAN_APPROVED)
+    const statusesToCheck =
+      subFlow === "flow2a"
+        ? ["PLAN_PENDING", "PLAN_APPROVED"]
+        : ["PENDING", "APPROVED"];
+
+    const existingEntries = await prisma.overtimeEntry.findMany({
+      where: {
+        date: { in: dates.map((d) => new Date(d)) },
+        overtimeRequest: {
+          employeeId,
+          status: { in: statusesToCheck },
+        },
+      },
+      select: { date: true },
+    });
+
+    if (existingEntries.length > 0) {
+      const dupes = existingEntries.map(
+        (e) => e.date.toISOString().split("T")[0],
+      );
       return res.status(400).json({
-        error: `The following dates already exist in your pending or approved requests: ${existingDates.join(", ")}. Please delete/reject them first.`,
-        duplicateDates: existingDates,
+        error: `Dates already have ${subFlow === "flow2a" ? "a plan" : "a request"}: ${dupes.join(", ")}`,
+        duplicateDates: dupes,
       });
     }
 
-    // Get employee data for calculation
-    const employee = await overtimeService.getEmployeeData(employeeId);
-
-    // Calculate totals
+    // ── Calculate totals ────────────────────────────────────────────────────
     const totalHours = entries.reduce((sum, e) => sum + parseFloat(e.hours), 0);
-    const overtimeRate = parseFloat(employee.overtimeRate) || 37500; // Default rate
+    const overtimeRate = parseFloat(employee.overtimeRate) || 37500;
     const totalAmount = (totalHours / 8) * overtimeRate;
 
-    // Determine approver (supervisor or division head or HR/Admin)
+    // ── Determine approver ──────────────────────────────────────────────────
     const approverId = await overtimeService.determineApprover(employee);
 
-    // Add this debug:
-    console.log("Debug - Approver determination:");
-    console.log("Employee ID:", employeeId);
-    console.log("Employee supervisor:", employee.supervisorId);
-    console.log("Determined approverId:", approverId);
+    // ── Map sub-flow to initial status ──────────────────────────────────────
+    const statusMap = {
+      flow1: "PENDING",
+      flow2a: "PLAN_PENDING",
+      flow2b: "PENDING", // incidental goes straight to PENDING (same as flow1)
+    };
+    const initialStatus = statusMap[subFlow];
 
-    // Create overtime request WITH currentApproverId
-    const overtimeRequest = await overtimeService.createOvertimeRequest({
-      employeeId,
-      entries,
-      totalHours,
-      totalAmount,
-      approverId,
-      currentApproverId: approverId,
-      supervisorId: employee.supervisorId,
+    // ── Create the request ──────────────────────────────────────────────────
+    const overtimeRequest = await prisma.overtimeRequest.create({
+      data: {
+        employeeId,
+        totalHours,
+        totalAmount,
+        status: initialStatus,
+        overtimeMode: mode,
+        isIncidental: subFlow === "flow2b",
+        incidentalReason: subFlow === "flow2b" ? incidentalReason.trim() : null,
+        currentApproverId: approverId,
+        supervisorId: employee.supervisorId || approverId,
+        supervisorStatus: "PENDING",
+        entries: {
+          create: entries.map((entry) => ({
+            date: new Date(entry.date),
+            hours: parseFloat(entry.hours),
+            plannedHours: subFlow === "flow2a" ? parseFloat(entry.hours) : null,
+            description: entry.description,
+          })),
+        },
+      },
+      include: {
+        entries: true,
+        employee: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            nip: true,
+            role: true,
+            division: true,
+          },
+        },
+        currentApprover: {
+          select: { id: true, name: true, email: true },
+        },
+      },
     });
-    console.log(
-      "Created request with currentApproverId:",
-      overtimeRequest.currentApproverId,
-    );
 
-    // Log submission in revision history
+    // ── Log submission ──────────────────────────────────────────────────────
     await revisionService.logSubmission(overtimeRequest.id, employeeId, {
       totalHours,
       totalAmount,
-      entries: entries,
+      entries,
+      subFlow,
+      isIncidental: subFlow === "flow2b",
     });
 
-    // Update pending hours in balance
-    await overtimeService.updatePendingHours(employeeId, totalHours, "ADD");
-    console.log("Pending hours updated for employee:", employeeId);
+    // ── Update pending hours (only for actual-hours flows) ──────────────────
+    // For flow2a (planned), we don't touch balance until actualization
+    if (subFlow !== "flow2a") {
+      await overtimeService.updatePendingHours(employeeId, totalHours, "ADD");
+    }
 
-    // Send email notification to approver
+    // ── Send email notification ─────────────────────────────────────────────
     try {
       const approver = await prisma.user.findUnique({
         where: { id: approverId },
         select: { id: true, name: true, email: true },
       });
-
-      if (approver && approver.email) {
+      if (approver?.email) {
         await sendOvertimeRequestNotification(
           approver,
           overtimeRequest,
           employee,
         );
-        console.log("Overtime request notification sent to:", approver.email);
       }
-    } catch (emailError) {
-      // Don't fail the request if email fails
-      console.error("⚠️ Email notification failed:", emailError.message);
+    } catch (emailErr) {
+      console.error("⚠️ Notification email failed:", emailErr.message);
     }
 
-    res.status(201).json({
-      message: "Overtime request submitted successfully",
+    return res.status(201).json({
+      message:
+        subFlow === "flow2a"
+          ? "Overtime plan submitted successfully. Awaiting supervisor approval."
+          : "Overtime request submitted successfully.",
+      subFlow,
+      isIncidental: subFlow === "flow2b",
       data: overtimeRequest,
     });
   } catch (error) {
     console.error("Submit overtime error:", error);
-    res
+    return res
       .status(500)
       .json({ error: error.message || "Failed to submit overtime request" });
   }
 };
+
+// =============================================================================
+// NEW: approvePlan
+// POST /api/overtime/:requestId/approve-plan
+// SPV approves the overtime PLAN before the date.
+// Only works for PLAN_PENDING status.
+// =============================================================================
+
+export const approvePlan = async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const { comment } = req.body;
+    const approverId = req.user.id;
+    const approverLevel = req.user.accessLevel;
+    const scopeEntityIds = req.user.scopeEntityIds;
+
+    const request = await prisma.overtimeRequest.findUnique({
+      where: { id: requestId },
+      include: {
+        employee: { include: { division: true, plottingCompany: true } },
+        entries: true,
+      },
+    });
+
+    if (!request) {
+      return res.status(404).json({ error: "Overtime request not found" });
+    }
+    if (request.status !== "PLAN_PENDING") {
+      return res.status(400).json({
+        error: `Cannot approve plan — current status is "${request.status}". Only PLAN_PENDING requests can have their plan approved.`,
+      });
+    }
+    if (request.overtimeMode !== "pre") {
+      return res.status(400).json({
+        error: "Plan approval is only for pre-approval overtime mode",
+      });
+    }
+
+    // Scope check for Level 2
+    if (approverLevel === 2) {
+      const entityId = request.employee?.plottingCompanyId;
+      if (!entityId || !scopeEntityIds?.includes(entityId)) {
+        return res.status(403).json({
+          error: "Access denied — employee is outside your scope",
+        });
+      }
+    }
+
+    // Auth check: must be admin or the assigned approver
+    const isAdmin = approverLevel <= 2;
+    const isAssignedApprover = request.currentApproverId === approverId;
+    if (!isAdmin && !isAssignedApprover) {
+      return res
+        .status(403)
+        .json({ error: "Not authorized to approve this plan" });
+    }
+
+    // Move to PLAN_APPROVED
+    const updated = await prisma.overtimeRequest.update({
+      where: { id: requestId },
+      data: {
+        status: "PLAN_APPROVED",
+        supervisorStatus: "APPROVED",
+        supervisorComment: comment || null,
+        supervisorDate: new Date(),
+        currentApproverId: approverId,
+      },
+      include: { employee: true, entries: true },
+    });
+
+    // Notify employee that plan is approved
+    try {
+      await sendOvertimePlanApprovedEmail(request.employee, updated);
+    } catch (emailErr) {
+      console.error("⚠️ Plan approval email failed:", emailErr.message);
+    }
+
+    return res.json({
+      success: true,
+      message:
+        "Overtime plan approved. Employee will be reminded to actualize after the overtime date.",
+      data: updated,
+    });
+  } catch (error) {
+    console.error("Approve plan error:", error);
+    return res.status(500).json({ error: "Failed to approve overtime plan" });
+  }
+};
+
+// =============================================================================
+// NEW: actualize
+// POST /api/overtime/:requestId/actualize
+// Employee submits actual hours after overtime is done.
+// Only works for PLAN_APPROVED requests where all entry dates have passed.
+// =============================================================================
+
+export const actualizeOvertime = async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const { entries } = req.body; // [{ entryId, actualHours }]
+    const employeeId = req.user.id;
+
+    if (!entries || !Array.isArray(entries) || entries.length === 0) {
+      return res
+        .status(400)
+        .json({ error: "Actualization entries are required" });
+    }
+
+    const request = await prisma.overtimeRequest.findUnique({
+      where: { id: requestId },
+      include: { entries: true, employee: true },
+    });
+
+    if (!request) {
+      return res.status(404).json({ error: "Overtime request not found" });
+    }
+    if (request.employeeId !== employeeId) {
+      return res
+        .status(403)
+        .json({ error: "Not authorized to actualize this request" });
+    }
+    if (request.status !== "PENDING_ACTUALIZATION") {
+      return res.status(400).json({
+        error: `Cannot actualize — status is "${request.status}". Only PENDING_ACTUALIZATION requests can be actualized.`,
+      });
+    }
+
+    // Validate all entry dates have passed
+    const today = startOfDay(new Date());
+    for (const entry of request.entries) {
+      if (isAfter(startOfDay(new Date(entry.date)), today)) {
+        return res.status(400).json({
+          error: `Entry date ${entry.date.toISOString().split("T")[0]} has not passed yet. Cannot actualize future dates.`,
+        });
+      }
+    }
+
+    // Validate submitted actualization entries
+    for (const ae of entries) {
+      if (!ae.entryId || ae.actualHours === undefined) {
+        return res
+          .status(400)
+          .json({ error: "Each entry needs entryId and actualHours" });
+      }
+      if (ae.actualHours < 0 || ae.actualHours > 12) {
+        return res.status(400).json({
+          error: `actualHours must be between 0 and 12 (0 means overtime was cancelled)`,
+        });
+      }
+    }
+
+    // Map entryId → actualHours
+    const actualizationMap = Object.fromEntries(
+      entries.map((e) => [e.entryId, parseFloat(e.actualHours)]),
+    );
+
+    // Verify all request entries are covered
+    const missingEntries = request.entries.filter(
+      (e) => actualizationMap[e.id] === undefined,
+    );
+    if (missingEntries.length > 0) {
+      return res.status(400).json({
+        error: "All entries must be actualized",
+        missing: missingEntries.map((e) => e.id),
+      });
+    }
+
+    // Calculate totals
+    const totalActualHours = Object.values(actualizationMap).reduce(
+      (sum, h) => sum + h,
+      0,
+    );
+    const overtimeRate = parseFloat(request.employee.overtimeRate) || 37500;
+    const totalActualAmount = (totalActualHours / 8) * overtimeRate;
+
+    // Auto-approve if actual ≤ planned, re-route to SPV if actual > planned
+    const totalPlannedHours = request.entries.reduce(
+      (sum, e) => sum + (e.plannedHours ?? e.hours),
+      0,
+    );
+    const exceedsPlanned = totalActualHours > totalPlannedHours;
+    const newStatus = exceedsPlanned ? "PENDING" : "APPROVED";
+
+    // Update all entries with actual hours
+    await prisma.$transaction([
+      ...request.entries.map((e) =>
+        prisma.overtimeEntry.update({
+          where: { id: e.id },
+          data: {
+            actualHours: actualizationMap[e.id],
+            actualizedAt: new Date(),
+            hours: actualizationMap[e.id], // update hours to reflect actual
+          },
+        }),
+      ),
+      prisma.overtimeRequest.update({
+        where: { id: requestId },
+        data: {
+          totalHours: totalActualHours,
+          totalAmount: totalActualAmount,
+          status: newStatus,
+          approvedAt: newStatus === "APPROVED" ? new Date() : null,
+          supervisorStatus: newStatus === "APPROVED" ? "APPROVED" : "PENDING",
+          supervisorDate: newStatus === "APPROVED" ? new Date() : null,
+          supervisorComment:
+            newStatus === "APPROVED"
+              ? "Auto-approved: actual hours ≤ planned"
+              : null,
+        },
+      }),
+    ]);
+
+    // If auto-approved, update balance
+    if (newStatus === "APPROVED") {
+      await prisma.overtimeBalance.upsert({
+        where: { employeeId },
+        update: {
+          currentBalance: { increment: totalActualHours },
+          pendingHours: { decrement: 0 }, // was never in pending (pre-flow)
+        },
+        create: {
+          employeeId,
+          currentBalance: totalActualHours,
+          totalPaid: 0,
+        },
+      });
+    } else {
+      // Exceeds planned — goes back to SPV, add to pending
+      await overtimeService.updatePendingHours(
+        employeeId,
+        totalActualHours,
+        "ADD",
+      );
+    }
+
+    const updated = await prisma.overtimeRequest.findUnique({
+      where: { id: requestId },
+      include: { entries: true, employee: true, currentApprover: true },
+    });
+
+    return res.json({
+      success: true,
+      message: exceedsPlanned
+        ? `Actual hours (${totalActualHours}h) exceed planned (${totalPlannedHours}h). Request sent back to supervisor for re-approval.`
+        : `Actualization complete. ${totalActualHours}h approved automatically.`,
+      autoApproved: !exceedsPlanned,
+      exceedsPlanned,
+      totalPlannedHours,
+      totalActualHours,
+      data: updated,
+    });
+  } catch (error) {
+    console.error("Actualize overtime error:", error);
+    return res.status(500).json({ error: "Failed to actualize overtime" });
+  }
+};
+
+// =============================================================================
+// NEW: getPendingActualization
+// GET /api/overtime/pending-actualization
+// Employee fetches their PLAN_APPROVED requests where date has passed.
+// =============================================================================
+
+export const getPendingActualization = async (req, res) => {
+  try {
+    const employeeId = req.user.id;
+    const today = endOfDay(new Date());
+
+    // Requests that are PENDING_ACTUALIZATION
+    const pendingActualization = await prisma.overtimeRequest.findMany({
+      where: {
+        employeeId,
+        status: "PENDING_ACTUALIZATION",
+      },
+      include: {
+        entries: { orderBy: { date: "asc" } },
+        currentApprover: { select: { id: true, name: true } },
+      },
+      orderBy: { submittedAt: "desc" },
+    });
+
+    // Also include PLAN_APPROVED where all dates have passed (in case scheduler hasn't run yet)
+    const planApprovedPastDue = await prisma.overtimeRequest.findMany({
+      where: {
+        employeeId,
+        status: "PLAN_APPROVED",
+        entries: {
+          every: { date: { lte: today } },
+        },
+      },
+      include: {
+        entries: { orderBy: { date: "asc" } },
+        currentApprover: { select: { id: true, name: true } },
+      },
+      orderBy: { submittedAt: "desc" },
+    });
+
+    return res.json({
+      success: true,
+      data: [...pendingActualization, ...planApprovedPastDue],
+      count: pendingActualization.length + planApprovedPastDue.length,
+    });
+  } catch (error) {
+    console.error("Get pending actualization error:", error);
+    return res
+      .status(500)
+      .json({ error: "Failed to fetch pending actualization" });
+  }
+};
+
+// =============================================================================
+// NEW: scheduledActualizationCheck (called by scheduler daily)
+// Moves PLAN_APPROVED requests to PENDING_ACTUALIZATION once dates have passed
+// =============================================================================
+
+export const triggerActualizationCheck = async (req, res) => {
+  try {
+    const result = await moveExpiredPlansToActualization();
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    console.error("Actualization check error:", error);
+    return res.status(500).json({ error: "Failed to run actualization check" });
+  }
+};
+
+export async function moveExpiredPlansToActualization() {
+  const today = endOfDay(new Date());
+
+  // Find all PLAN_APPROVED requests where ALL entry dates have passed
+  const expiredPlans = await prisma.overtimeRequest.findMany({
+    where: {
+      status: "PLAN_APPROVED",
+      entries: {
+        every: { date: { lte: today } },
+      },
+    },
+    include: {
+      employee: { select: { id: true, name: true, email: true } },
+      entries: true,
+    },
+  });
+
+  if (expiredPlans.length === 0) {
+    console.log("[ActualizationCheck] No expired plans found");
+    return { moved: 0 };
+  }
+
+  let moved = 0;
+  for (const plan of expiredPlans) {
+    await prisma.overtimeRequest.update({
+      where: { id: plan.id },
+      data: { status: "PENDING_ACTUALIZATION" },
+    });
+
+    // Notify employee they need to actualize
+    try {
+      await sendOvertimeActualizationNeededEmail(plan.employee, plan);
+    } catch (emailErr) {
+      console.error(
+        `[ActualizationCheck] Email failed for ${plan.id}:`,
+        emailErr.message,
+      );
+    }
+
+    moved++;
+  }
+
+  console.log(
+    `[ActualizationCheck] Moved ${moved} plan(s) to PENDING_ACTUALIZATION`,
+  );
+  return { moved, planIds: expiredPlans.map((p) => p.id) };
+}
 
 /**
  * Get my overtime requests
@@ -568,20 +1031,18 @@ export const getPendingApprovals = async (req, res) => {
         plottingCompanyId: { in: scopeEntityIds },
       };
     } else {
-      // Level 3+: See only requests assigned to them (PENDING only)
-      if (status === "PENDING") {
-        whereClause.currentApproverId = userId;
-        console.log(
-          `[OVERTIME APPROVAL] Level 3+ - viewing assigned ${status} requests`,
-        );
-      } else {
-        // Level 3+ cannot see approved/rejected lists
-        return res.json({
-          success: true,
-          data: [],
-          message: "Only administrators can view approved/rejected requests",
-        });
+      // Level 3+ (SPV, Manager): See requests where they are the assigned approver
+      // Applies to ALL statuses — they can see their full history (pending, approved, rejected)
+      whereClause.currentApproverId = userId;
+
+      // Also include PLAN_PENDING requests assigned to them
+      if (status === "PLAN_PENDING") {
+        whereClause.status = "PLAN_PENDING";
       }
+
+      console.log(
+        `[OVERTIME APPROVAL] Level 3+ - viewing assigned ${status} requests`,
+      );
     }
 
     const requests = await prisma.overtimeRequest.findMany({

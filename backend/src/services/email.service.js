@@ -78,6 +78,79 @@ function createTransporter() {
 const transporter = createTransporter();
 
 /**
+ * Create a transporter for a named SMTP profile.
+ * Profile key maps to env vars: SMTP2GO_{KEY}_USER / PASS / HOST / PORT / FROM_EMAIL / FROM_NAME
+ * Falls back to default transporter if profile is null/undefined/"default" or env vars missing.
+ *
+ * Example env for profile "kgi":
+ *   SMTP2GO_KGI_USER=sender@kgi.com
+ *   SMTP2GO_KGI_PASS=secret
+ *   SMTP2GO_KGI_HOST=mail.smtp2go.com      (optional, defaults to SMTP2GO_HOST)
+ *   SMTP2GO_KGI_PORT=2525                  (optional)
+ *   SMTP2GO_KGI_FROM_EMAIL=hr@kgi.com
+ *   SMTP2GO_KGI_FROM_NAME=KGI HR
+ *
+ * @param {string|null} profile - smtpProfile key from PolicyTemplate
+ * @returns {{ transporter: import("nodemailer").Transporter, fromEmail: string, fromName: string }}
+ */
+function createTransporterForProfile(profile) {
+  // null / undefined / "default" → use shared default transporter
+  if (!profile || profile === "default") {
+    return {
+      transporter,
+      fromEmail:
+        process.env.SMTP_FROM_EMAIL ||
+        process.env.SMTP_FROM ||
+        "noreply@company.com",
+      fromName: process.env.SMTP_FROM_NAME || "HR System",
+    };
+  }
+
+  const key = profile.toUpperCase();
+  const user = process.env[`SMTP2GO_${key}_USER`];
+  const pass = process.env[`SMTP2GO_${key}_PASS`];
+
+  if (!user || !pass) {
+    console.warn(
+      `⚠️  [EMAIL] smtpProfile "${profile}" missing env vars SMTP2GO_${key}_USER / SMTP2GO_${key}_PASS — falling back to default transporter`,
+    );
+    return {
+      transporter,
+      fromEmail:
+        process.env.SMTP_FROM_EMAIL ||
+        process.env.SMTP_FROM ||
+        "noreply@company.com",
+      fromName: process.env.SMTP_FROM_NAME || "HR System",
+    };
+  }
+
+  const host =
+    process.env[`SMTP2GO_${key}_HOST`] ||
+    process.env.SMTP2GO_HOST ||
+    "mail.smtp2go.com";
+  const port = parseInt(
+    process.env[`SMTP2GO_${key}_PORT`] || process.env.SMTP2GO_PORT || "2525",
+  );
+
+  console.log(
+    `📧 [EMAIL] Using SMTP2GO profile "${profile}" (host: ${host}, user: ${user})`,
+  );
+
+  return {
+    transporter: nodemailer.createTransport({ host, port, auth: { user, pass } }),
+    fromEmail:
+      process.env[`SMTP2GO_${key}_FROM_EMAIL`] ||
+      process.env.SMTP_FROM_EMAIL ||
+      process.env.SMTP_FROM ||
+      "noreply@company.com",
+    fromName:
+      process.env[`SMTP2GO_${key}_FROM_NAME`] ||
+      process.env.SMTP_FROM_NAME ||
+      "HR System",
+  };
+}
+
+/**
  * Send email via configured SMTP service (Mailtrap or SMTP2GO)
  * @param {Object} options - Email options
  * @param {string} options.to - Recipient email
@@ -85,13 +158,17 @@ const transporter = createTransporter();
  * @param {string} options.html - HTML body
  * @param {string} [options.text] - Plain text body (optional)
  * @param {string|string[]} [options.cc] - CC recipients (optional)
+ * @param {string|null} [options.smtpProfile] - SMTP profile key from PolicyTemplate (optional)
  * @returns {Promise<{success: boolean, messageId?: string, error?: string}>}
  */
-export async function sendEmail({ to, subject, html, text, cc }) {
+export async function sendEmail({ to, subject, html, text, cc, smtpProfile }) {
   try {
+    const { transporter: t, fromEmail, fromName } =
+      createTransporterForProfile(smtpProfile ?? null);
+
     // Build email options
     const mailOptions = {
-      from: `${process.env.SMTP_FROM_NAME || "HR System"} <${process.env.SMTP_FROM_EMAIL || process.env.SMTP_FROM || "noreply@company.com"}>`,
+      from: `${fromName} <${fromEmail}>`,
       to: to,
       subject: subject,
       html: html,
@@ -107,11 +184,12 @@ export async function sendEmail({ to, subject, html, text, cc }) {
       to,
       cc: cc || "none",
       subject,
+      smtpProfile: smtpProfile || "default",
       service: process.env.SMTP_HOST ? "Mailtrap/SMTP" : "SMTP2GO",
     });
 
     // Send email
-    const info = await transporter.sendMail(mailOptions);
+    const info = await t.sendMail(mailOptions);
 
     console.log("[EMAIL] Email sent successfully:", {
       to,
@@ -4403,6 +4481,274 @@ export async function sendAdminRejectOvertimeEmail(
   }
 }
 
+/**
+ * Send email when SPV approves an overtime PLAN (Flow 2A)
+ * Notifies employee: "Your plan is approved, go ahead with the overtime"
+ *
+ * @param {Object} user            - The employee (to recipient)
+ * @param {Object} overtimeRequest - The overtime request (must include entries[])
+ */
+export async function sendOvertimePlanApprovedEmail(user, overtimeRequest) {
+  const entries = overtimeRequest.entries || [];
+  const totalHours = overtimeRequest.totalHours || 0;
+  const submittedAt = new Date(
+    overtimeRequest.submittedAt || overtimeRequest.createdAt || new Date(),
+  );
+
+  const entryRows = entries
+    .map((e) => {
+      const dateStr = new Date(e.date).toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+      return `
+        <div class="detail-row">
+          <div class="detail-label">${dateStr}</div>
+          <div class="detail-value">${e.plannedHours ?? e.hours}h — ${e.description}</div>
+        </div>`;
+    })
+    .join("");
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #000000; margin: 0; padding: 0; background-color: #F9F9F9; }
+        .email-wrapper { width: 100%; background-color: #F9F9F9; padding: 40px 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: #FFFFFF; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .header { background: linear-gradient(135deg, #152A55 0%, #000000 100%); color: #FFFFFF; padding: 40px 30px; text-align: center; }
+        .header h1 { margin: 0; font-size: 26px; font-weight: 600; }
+        .header p  { margin: 8px 0 0 0; font-size: 14px; opacity: 0.8; }
+        .content { padding: 40px 30px; }
+        .content p { margin: 0 0 20px 0; font-size: 16px; line-height: 1.8; }
+        .status-badge { display: inline-block; background: #152A55; color: #FFFFFF; padding: 10px 24px; border-radius: 25px; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; margin: 16px 0; }
+        .info-box { background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 10px; padding: 16px 20px; margin: 20px 0; font-size: 14px; color: #1E40AF; }
+        .details-card { background: #F5F5F5; border: 1px solid #E0E0E0; border-radius: 10px; padding: 25px; margin: 24px 0; }
+        .details-card h3 { margin: 0 0 18px 0; font-size: 16px; font-weight: 600; color: #152A55; }
+        .detail-row { display: flex; padding: 10px 0; border-bottom: 1px solid #E0E0E0; font-size: 14px; }
+        .detail-row:last-child { border-bottom: none; }
+        .detail-label { font-weight: 600; color: #000000; min-width: 160px; flex-shrink: 0; }
+        .detail-value { color: #666666; flex: 1; }
+        .button { display: inline-block; background: #152A55; color: #FFFFFF; padding: 14px 35px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; margin-top: 20px; }
+        .footer { padding: 30px; background: #F5F5F5; text-align: center; color: #666666; font-size: 14px; border-top: 1px solid #E0E0E0; }
+        .footer-signature { font-weight: 600; color: #000000; margin-bottom: 6px; }
+        .footer-note { font-size: 12px; color: #999999; margin-top: 12px; }
+        @media only screen and (max-width: 600px) {
+          .email-wrapper { padding: 20px 10px; }
+          .content { padding: 30px 20px; }
+          .detail-row { flex-direction: column; }
+          .detail-label { min-width: auto; margin-bottom: 4px; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="email-wrapper">
+        <div class="container">
+          <div class="header">
+            <h1>✅ Overtime Plan Approved</h1>
+            <p>Your overtime plan has been approved</p>
+          </div>
+
+          <div class="content">
+            <p>Hi <strong>${user.name}</strong>,</p>
+
+            <div class="status-badge">PLAN APPROVED</div>
+
+            <p>
+              Your supervisor has approved your overtime plan.
+              You are cleared to proceed with the planned overtime on the scheduled date(s).
+            </p>
+
+            <div class="info-box">
+              📋 <strong>Next step:</strong> After completing the overtime, please submit your
+              actual hours in the HR system within <strong>7 days</strong>. The system will
+              remind you automatically.
+            </div>
+
+            <div class="details-card">
+              <h3>Approved Plan — ${totalHours}h total</h3>
+              ${entryRows}
+            </div>
+
+            ${
+              process.env.FRONTEND_URL
+                ? `<a href="${process.env.FRONTEND_URL}/overtime/my-requests" class="button">View My Requests</a>`
+                : ""
+            }
+          </div>
+
+          <div class="footer">
+            <div class="footer-signature">HR Team</div>
+            <div>Human Resources Department</div>
+            <div class="footer-note">This is an automated notification from the HR system.</div>
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: user.email,
+    cc: process.env.HR_EMAIL || "hr@rhayaflicks.com",
+    subject: "Overtime Plan Approved — Please Actualize After Completion",
+    html,
+  });
+}
+
+/**
+ * Send email when an overtime plan's date has passed and actualization is needed (Flow 2A)
+ * Notifies employee: "Your overtime date passed — please submit actual hours"
+ *
+ * @param {Object} user            - The employee (to recipient)
+ * @param {Object} overtimeRequest - The overtime request (must include entries[])
+ */
+export async function sendOvertimeActualizationNeededEmail(
+  user,
+  overtimeRequest,
+) {
+  const entries = overtimeRequest.entries || [];
+  const totalHours = overtimeRequest.totalHours || 0;
+
+  const entryRows = entries
+    .map((e) => {
+      const dateStr = new Date(e.date).toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+      return `
+        <div class="detail-row">
+          <div class="detail-label">${dateStr}</div>
+          <div class="detail-value">Planned: ${e.plannedHours ?? e.hours}h — ${e.description}</div>
+        </div>`;
+    })
+    .join("");
+
+  // Deadline: 7 days from latest entry date
+  const latestDate = entries.reduce((latest, e) => {
+    const d = new Date(e.date);
+    return d > latest ? d : latest;
+  }, new Date(0));
+
+  const deadline = new Date(latestDate);
+  deadline.setDate(deadline.getDate() + 7);
+  const deadlineStr = deadline.toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #000000; margin: 0; padding: 0; background-color: #F9F9F9; }
+        .email-wrapper { width: 100%; background-color: #F9F9F9; padding: 40px 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: #FFFFFF; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .header { background: linear-gradient(135deg, #7C3AED 0%, #152A55 100%); color: #FFFFFF; padding: 40px 30px; text-align: center; }
+        .header h1 { margin: 0; font-size: 26px; font-weight: 600; }
+        .header p  { margin: 8px 0 0 0; font-size: 14px; opacity: 0.8; }
+        .content { padding: 40px 30px; }
+        .content p { margin: 0 0 20px 0; font-size: 16px; line-height: 1.8; }
+        .status-badge { display: inline-block; background: #7C3AED; color: #FFFFFF; padding: 10px 24px; border-radius: 25px; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; margin: 16px 0; }
+        .deadline-box { background: #FEF3C7; border: 1px solid #FCD34D; border-radius: 10px; padding: 16px 20px; margin: 20px 0; font-size: 14px; color: #92400E; }
+        .steps-box { background: #F0FDF4; border: 1px solid #86EFAC; border-radius: 10px; padding: 16px 20px; margin: 20px 0; font-size: 14px; color: #166534; }
+        .steps-box ol { margin: 8px 0 0 0; padding-left: 20px; }
+        .steps-box li { margin-bottom: 6px; }
+        .details-card { background: #F5F5F5; border: 1px solid #E0E0E0; border-radius: 10px; padding: 25px; margin: 24px 0; }
+        .details-card h3 { margin: 0 0 18px 0; font-size: 16px; font-weight: 600; color: #152A55; }
+        .detail-row { display: flex; padding: 10px 0; border-bottom: 1px solid #E0E0E0; font-size: 14px; }
+        .detail-row:last-child { border-bottom: none; }
+        .detail-label { font-weight: 600; color: #000000; min-width: 160px; flex-shrink: 0; }
+        .detail-value { color: #666666; flex: 1; }
+        .button { display: inline-block; background: #7C3AED; color: #FFFFFF; padding: 14px 35px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; margin-top: 20px; }
+        .footer { padding: 30px; background: #F5F5F5; text-align: center; color: #666666; font-size: 14px; border-top: 1px solid #E0E0E0; }
+        .footer-signature { font-weight: 600; color: #000000; margin-bottom: 6px; }
+        .footer-note { font-size: 12px; color: #999999; margin-top: 12px; }
+        @media only screen and (max-width: 600px) {
+          .email-wrapper { padding: 20px 10px; }
+          .content { padding: 30px 20px; }
+          .detail-row { flex-direction: column; }
+          .detail-label { min-width: auto; margin-bottom: 4px; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="email-wrapper">
+        <div class="container">
+          <div class="header">
+            <h1>⏰ Actualization Required</h1>
+            <p>Please submit your actual overtime hours</p>
+          </div>
+
+          <div class="content">
+            <p>Hi <strong>${user.name}</strong>,</p>
+
+            <div class="status-badge">ACTION NEEDED</div>
+
+            <p>
+              Your approved overtime plan has passed. Please log into the HR system
+              and submit your <strong>actual hours</strong> worked.
+            </p>
+
+            <div class="deadline-box">
+              ⚠️ <strong>Deadline:</strong> ${deadlineStr}
+              <br>Please actualize before this date to ensure your overtime is counted.
+            </div>
+
+            <div class="steps-box">
+              <strong>How to actualize:</strong>
+              <ol>
+                <li>Go to <em>Overtime → Needs Actualization</em></li>
+                <li>Find this request and click <em>Actualize</em></li>
+                <li>Enter the actual hours for each date</li>
+                <li>Enter <strong>0</strong> for any date where overtime was cancelled</li>
+                <li>Submit — if actual ≤ planned, it auto-approves</li>
+              </ol>
+            </div>
+
+            <div class="details-card">
+              <h3>Original Plan — ${totalHours}h planned</h3>
+              ${entryRows}
+            </div>
+
+            ${
+              process.env.FRONTEND_URL
+                ? `<a href="${process.env.FRONTEND_URL}/overtime/pending-actualization" class="button">Actualize Now</a>`
+                : ""
+            }
+          </div>
+
+          <div class="footer">
+            <div class="footer-signature">HR Team</div>
+            <div>Human Resources Department</div>
+            <div class="footer-note">This is an automated notification from the HR system.</div>
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: user.email,
+    cc: process.env.HR_EMAIL || "hr@rhayaflicks.com",
+    subject: `Action Required: Actualize Your Overtime by ${deadlineStr}`,
+    html,
+  });
+}
+
 export default {
   sendEmail,
   sendOvertimeApprovedEmail,
@@ -4420,4 +4766,6 @@ export default {
   sendBatchPayslipNotification,
   sendLeaveCancellationEmail,
   sendAdminRejectOvertimeEmail,
+  sendOvertimePlanApprovedEmail,
+  sendOvertimeActualizationNeededEmail,
 };

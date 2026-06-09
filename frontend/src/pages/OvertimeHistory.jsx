@@ -166,12 +166,16 @@ export default function OvertimeHistory() {
   };
 
   // Status badge component
-  const StatusBadge = ({ status }) => {
+  const StatusBadge = ({ status, isIncidental }) => {
     const styles = {
       PENDING: "bg-yellow-100 text-yellow-800",
       APPROVED: "bg-green-100 text-green-800",
       REJECTED: "bg-red-100 text-red-800",
       REVISION_REQUESTED: "bg-orange-100 text-orange-800",
+      // V2 new statuses
+      PLAN_PENDING: "bg-blue-100 text-blue-800",
+      PLAN_APPROVED: "bg-teal-100 text-teal-800",
+      PENDING_ACTUALIZATION: "bg-purple-100 text-purple-800",
     };
 
     const labels = {
@@ -179,13 +183,21 @@ export default function OvertimeHistory() {
       APPROVED: t("overtime.approved"),
       REJECTED: t("overtime.rejected"),
       REVISION_REQUESTED: t("overtime.revisionRequested"),
+      PLAN_PENDING: "Plan Pending",
+      PLAN_APPROVED: "Plan Approved",
+      PENDING_ACTUALIZATION: "Needs Actualization",
     };
 
     return (
       <span
-        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${styles[status]}`}
+        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${styles[status] || "bg-gray-100 text-gray-800"}`}
       >
-        {labels[status]}
+        {labels[status] || status.replace(/_/g, " ")}
+        {isIncidental && (
+          <span className="ml-1 px-1.5 py-0.5 bg-orange-500 text-white text-xs rounded-full font-semibold">
+            Incidental
+          </span>
+        )}
       </span>
     );
   };
@@ -206,7 +218,16 @@ export default function OvertimeHistory() {
     REVISION_REQUESTED: allRequests.filter(
       (r) => r.status === "REVISION_REQUESTED",
     ).length,
+    // V2 new statuses
+    PLAN_PENDING: allRequests.filter((r) => r.status === "PLAN_PENDING").length,
+    PLAN_APPROVED: allRequests.filter((r) => r.status === "PLAN_APPROVED")
+      .length,
+    PENDING_ACTUALIZATION: allRequests.filter(
+      (r) => r.status === "PENDING_ACTUALIZATION",
+    ).length,
   };
+
+  const actualizationCount = stats.PENDING_ACTUALIZATION;
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -478,6 +499,32 @@ export default function OvertimeHistory() {
         )}
       </div>
 
+      {/* ── V2: Actualization needed alert ──────────────────────────────────── */}
+      {actualizationCount > 0 && (
+        <div className="mb-4 bg-purple-50 border border-purple-200 rounded-lg p-3 sm:p-4 flex items-center gap-3">
+          <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+            <span className="text-purple-700 font-bold text-sm">
+              {actualizationCount}
+            </span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-purple-800">
+              Actualization Required
+            </p>
+            <p className="text-xs text-purple-600">
+              You have {actualizationCount} overtime request(s) that need actual
+              hours to be submitted.
+            </p>
+          </div>
+          <button
+            onClick={() => setStatusFilter("PENDING_ACTUALIZATION")}
+            className="px-3 py-1.5 bg-purple-600 text-white text-xs font-medium rounded-lg hover:bg-purple-700 flex-shrink-0"
+          >
+            Actualize Now
+          </button>
+        </div>
+      )}
+
       {/* Filter Tabs - Mobile: Horizontal Scroll, Desktop: Flex */}
       <div className="mb-4 bg-white rounded-t-lg shadow-sm overflow-hidden">
         <div className="border-b border-gray-200">
@@ -486,71 +533,99 @@ export default function OvertimeHistory() {
             {[
               "all",
               "PENDING",
+              "PENDING_ACTUALIZATION",
+              "PLAN_PENDING",
+              "PLAN_APPROVED",
               "APPROVED",
               "REVISION_REQUESTED",
               "REJECTED",
-            ].map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setStatusFilter(tab)}
-                className={`flex-shrink-0 py-3 px-3 border-b-2 font-medium text-xs transition-colors whitespace-nowrap ${
-                  statusFilter === tab
-                    ? "border-blue-500 text-blue-600"
-                    : "border-transparent text-gray-500 active:text-gray-700"
-                }`}
-              >
-                {tab === "all"
-                  ? t("overtime.allRequests")
-                  : t(
-                      `overtime.${tab.toLowerCase().replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())}`,
-                    )}
-                <span
-                  className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs ${
+            ].map((tab) => {
+              const tabLabels = {
+                all: t("overtime.allRequests"),
+                PENDING: t("overtime.pending"),
+                APPROVED: t("overtime.approved"),
+                REJECTED: t("overtime.rejected"),
+                REVISION_REQUESTED: t("overtime.revisionRequested"),
+                PLAN_PENDING: "Plan Pending",
+                PLAN_APPROVED: "Plan Approved",
+                PENDING_ACTUALIZATION: "Actualize",
+              };
+              const tabColors = {
+                PENDING_ACTUALIZATION: "border-purple-500 text-purple-600",
+                PLAN_PENDING: "border-blue-500 text-blue-600",
+                PLAN_APPROVED: "border-teal-500 text-teal-600",
+              };
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setStatusFilter(tab)}
+                  className={`flex-shrink-0 py-3 px-3 border-b-2 font-medium text-xs transition-colors whitespace-nowrap ${
                     statusFilter === tab
-                      ? "bg-blue-100 text-blue-600"
-                      : "bg-gray-100 text-gray-600"
+                      ? tabColors[tab] || "border-blue-500 text-blue-600"
+                      : "border-transparent text-gray-500 active:text-gray-700"
                   }`}
                 >
-                  {tab === "all" ? stats.all : stats[tab]}
-                </span>
-              </button>
-            ))}
+                  {tabLabels[tab] || tab}
+                  <span
+                    className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs ${statusFilter === tab ? "bg-blue-100 text-blue-600" : "bg-gray-100 text-gray-600"}`}
+                  >
+                    {tab === "all" ? stats.all : stats[tab] || 0}
+                  </span>
+                </button>
+              );
+            })}
           </nav>
 
           {/* Desktop: Normal flex tabs */}
-          <nav className="hidden sm:flex px-4 space-x-6">
+          <nav className="hidden sm:flex px-4 space-x-4 overflow-x-auto">
             {[
               "all",
               "PENDING",
+              "PENDING_ACTUALIZATION",
+              "PLAN_PENDING",
+              "PLAN_APPROVED",
               "APPROVED",
               "REVISION_REQUESTED",
               "REJECTED",
-            ].map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setStatusFilter(tab)}
-                className={`pb-3 pt-3 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
-                  statusFilter === tab
-                    ? "border-blue-500 text-blue-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                }`}
-              >
-                {tab === "all"
-                  ? t("overtime.allRequests")
-                  : t(
-                      `overtime.${tab.toLowerCase().replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())}`,
-                    )}
-                <span
-                  className={`ml-2 px-2 py-0.5 rounded-full text-xs ${
+            ].map((tab) => {
+              const tabLabels = {
+                all: t("overtime.allRequests"),
+                PENDING: t("overtime.pending"),
+                APPROVED: t("overtime.approved"),
+                REJECTED: t("overtime.rejected"),
+                REVISION_REQUESTED: t("overtime.revisionRequested"),
+                PLAN_PENDING: "Plan Pending",
+                PLAN_APPROVED: "Plan Approved",
+                PENDING_ACTUALIZATION: "Actualize",
+              };
+              const activeColors = {
+                PENDING_ACTUALIZATION: "border-purple-500 text-purple-600",
+                PLAN_PENDING: "border-blue-400 text-blue-500",
+                PLAN_APPROVED: "border-teal-500 text-teal-600",
+              };
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setStatusFilter(tab)}
+                  className={`pb-3 pt-3 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
                     statusFilter === tab
-                      ? "bg-blue-100 text-blue-600"
-                      : "bg-gray-100 text-gray-600"
+                      ? activeColors[tab] || "border-blue-500 text-blue-600"
+                      : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                   }`}
                 >
-                  {tab === "all" ? stats.all : stats[tab]}
-                </span>
-              </button>
-            ))}
+                  {tabLabels[tab] || tab}
+                  <span
+                    className={`ml-2 px-2 py-0.5 rounded-full text-xs ${
+                      statusFilter === tab
+                        ? "bg-blue-100 text-blue-600"
+                        : "bg-gray-100 text-gray-600"
+                    }`}
+                  >
+                    {tab === "all" ? stats.all : stats[tab] || 0}
+                  </span>
+                </button>
+              );
+            })}
           </nav>
         </div>
       </div>
@@ -639,7 +714,10 @@ export default function OvertimeHistory() {
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
                   <div className="flex-1">
                     <div className="flex flex-wrap items-center gap-2 mb-2">
-                      <StatusBadge status={request.status} />
+                      <StatusBadge
+                        status={request.status}
+                        isIncidental={request.isIncidental}
+                      />
                       <span className="text-xs sm:text-sm text-gray-500">
                         {t("overtime.submittedOn")}{" "}
                         {format(new Date(request.submittedAt), "MMM dd, yyyy")}
@@ -802,6 +880,55 @@ export default function OvertimeHistory() {
                         {request.divisionHeadComment}
                       </p>
                     )}
+                  </div>
+                )}
+
+                {/* ── V2: Incidental reason display ──────────────────────── */}
+                {request.isIncidental && request.incidentalReason && (
+                  <div className="mt-3 p-3 bg-orange-50 rounded-lg border border-orange-200">
+                    <p className="text-xs font-semibold text-orange-800 mb-1">
+                      Incidental Reason
+                    </p>
+                    <p className="text-xs text-orange-700">
+                      {request.incidentalReason}
+                    </p>
+                  </div>
+                )}
+
+                {/* ── V2: Plan approved info box ──────────────────────────── */}
+                {request.status === "PLAN_APPROVED" && (
+                  <div className="mt-3 p-3 bg-teal-50 rounded-lg border border-teal-200">
+                    <p className="text-xs font-semibold text-teal-800 mb-1">
+                      📋 Plan Approved
+                    </p>
+                    <p className="text-xs text-teal-700">
+                      Your overtime plan has been approved. After completing the
+                      overtime, you'll receive a reminder to submit your actual
+                      hours.
+                    </p>
+                  </div>
+                )}
+
+                {/* ── V2: Actualization needed banner + button ────────────── */}
+                {request.status === "PENDING_ACTUALIZATION" && (
+                  <div className="mt-3 p-3 bg-purple-50 rounded-lg border border-purple-200">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold text-purple-800 mb-1">
+                          ⏰ Actualization Required
+                        </p>
+                        <p className="text-xs text-purple-700">
+                          Your overtime date has passed. Please submit your
+                          actual hours worked.
+                        </p>
+                      </div>
+                      <Link
+                        to={`/overtime/actualize/${request.id}`}
+                        className="flex-shrink-0 px-3 py-1.5 bg-purple-600 text-white text-xs font-medium rounded-lg hover:bg-purple-700"
+                      >
+                        Actualize
+                      </Link>
+                    </div>
                   </div>
                 )}
               </div>

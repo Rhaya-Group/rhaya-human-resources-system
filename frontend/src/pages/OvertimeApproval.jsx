@@ -23,6 +23,11 @@ export default function OvertimeApproval() {
   const [comment, setComment] = useState("");
   const [pendingCount, setPendingCount] = useState(0);
   const [revisionCount, setRevisionCount] = useState(0);
+  const [plannedCount, setPlannedCount] = useState(0);
+
+  // ── V2: Fetch approver's entity policy to know if pre-mode ───────────────
+  const [overtimeMode, setOvertimeMode] = useState("post"); // "pre" | "post"
+  const isPreMode = overtimeMode === "pre";
 
   // Filter state
   const [filters, setFilters] = useState({
@@ -45,11 +50,22 @@ export default function OvertimeApproval() {
 
   useEffect(() => {
     fetchDivisions();
+    fetchOvertimePolicy();
   }, []);
 
   useEffect(() => {
     applyFilters();
   }, [filters, allRequests]);
+
+  const fetchOvertimePolicy = async () => {
+    try {
+      const res = await apiClient.get("/policy-templates/my-policy-url");
+      const mode = res.data.data?.overtimeMode || "post";
+      setOvertimeMode(mode);
+    } catch (err) {
+      console.error("Failed to fetch overtime policy:", err);
+    }
+  };
 
   const fetchDivisions = async () => {
     try {
@@ -63,35 +79,173 @@ export default function OvertimeApproval() {
   const fetchRequests = async () => {
     setLoading(true);
     try {
-      let response;
-      if (activeTab === "pending") {
-        response = await apiClient.get("/overtime/pending-approval/list");
-        // Update pending count when on pending tab
-        setPendingCount(response.data.data?.length || 0);
-      } else if (activeTab === "revision") {
-        // response = await apiClient.get('/overtime/admin/all-requests?status=REVISION_REQUESTED');
-        response = await apiClient.get(
-          "/overtime/admin/all-requests?status=REVISION_REQUESTED",
-        );
-        setRevisionCount(response.data.data?.length || 0);
-      } else if (isAdmin) {
-        const status = activeTab === "all" ? "" : activeTab.toUpperCase();
-        response = await apiClient.get(
-          `/overtime/admin/all-requests${status ? `?status=${status}` : ""}`,
-        );
+      let data = [];
 
-        // If on 'all' tab, update pending count from all requests
-        if (activeTab === "all") {
-          const count =
-            response.data.data?.filter((r) => r.status === "PENDING").length ||
-            0;
+      if (isAdmin) {
+        // ── Admin (Level 1-2): use admin endpoint, full visibility ───────────
+        if (activeTab === "pending") {
+          const [pendingRes, planRes] = await Promise.allSettled([
+            apiClient.get("/overtime/admin/all-requests?status=PENDING"),
+            apiClient.get("/overtime/admin/all-requests?status=PLAN_PENDING"),
+          ]);
+          const pending =
+            pendingRes.status === "fulfilled"
+              ? pendingRes.value.data.data || []
+              : [];
+          const planned =
+            planRes.status === "fulfilled" ? planRes.value.data.data || [] : [];
+          const seen = new Set();
+          data = [...pending, ...planned].filter((r) => {
+            if (seen.has(r.id)) return false;
+            seen.add(r.id);
+            return true;
+          });
+          setPendingCount(data.length);
+        } else if (activeTab === "planned") {
+          // Planned tab: PLAN_PENDING + PLAN_APPROVED
+          const [planPendingRes, planApprovedRes] = await Promise.allSettled([
+            apiClient.get("/overtime/admin/all-requests?status=PLAN_PENDING"),
+            apiClient.get("/overtime/admin/all-requests?status=PLAN_APPROVED"),
+          ]);
+          const planPending =
+            planPendingRes.status === "fulfilled"
+              ? planPendingRes.value.data.data || []
+              : [];
+          const planApproved =
+            planApprovedRes.status === "fulfilled"
+              ? planApprovedRes.value.data.data || []
+              : [];
+          const seen = new Set();
+          data = [...planPending, ...planApproved].filter((r) => {
+            if (seen.has(r.id)) return false;
+            seen.add(r.id);
+            return true;
+          });
+          setPlannedCount(data.length);
+        } else if (activeTab === "revision") {
+          const res = await apiClient.get(
+            "/overtime/admin/all-requests?status=REVISION_REQUESTED",
+          );
+          data = res.data.data || [];
+          setRevisionCount(data.length);
+        } else if (activeTab === "all") {
+          const res = await apiClient.get("/overtime/admin/all-requests");
+          data = res.data.data || [];
+          const count = data.filter(
+            (r) => r.status === "PENDING" || r.status === "PLAN_PENDING",
+          ).length;
           setPendingCount(count);
+          const pCount = data.filter(
+            (r) => r.status === "PLAN_PENDING" || r.status === "PLAN_APPROVED",
+          ).length;
+          setPlannedCount(pCount);
+        } else {
+          // approved / rejected
+          const res = await apiClient.get(
+            `/overtime/admin/all-requests?status=${activeTab.toUpperCase()}`,
+          );
+          data = res.data.data || [];
         }
       } else {
-        response = { data: { data: [] } };
+        // ── SPV / non-admin (Level 3+) ────────────────────────────────────────
+        if (activeTab === "pending") {
+          const [pendingRes, planRes] = await Promise.allSettled([
+            apiClient.get("/overtime/pending-approval/list?status=PENDING"),
+            apiClient.get(
+              "/overtime/pending-approval/list?status=PLAN_PENDING",
+            ),
+          ]);
+          const pending =
+            pendingRes.status === "fulfilled"
+              ? pendingRes.value.data.data || []
+              : [];
+          const planned =
+            planRes.status === "fulfilled" ? planRes.value.data.data || [] : [];
+          const seen = new Set();
+          data = [...pending, ...planned].filter((r) => {
+            if (seen.has(r.id)) return false;
+            seen.add(r.id);
+            return true;
+          });
+          setPendingCount(data.length);
+        } else if (activeTab === "planned") {
+          // Planned tab: PLAN_PENDING + PLAN_APPROVED assigned to this SPV
+          const [planPendingRes, planApprovedRes] = await Promise.allSettled([
+            apiClient.get(
+              "/overtime/pending-approval/list?status=PLAN_PENDING",
+            ),
+            apiClient.get(
+              "/overtime/pending-approval/list?status=PLAN_APPROVED",
+            ),
+          ]);
+          const planPending =
+            planPendingRes.status === "fulfilled"
+              ? planPendingRes.value.data.data || []
+              : [];
+          const planApproved =
+            planApprovedRes.status === "fulfilled"
+              ? planApprovedRes.value.data.data || []
+              : [];
+          const seen = new Set();
+          data = [...planPending, ...planApproved].filter((r) => {
+            if (seen.has(r.id)) return false;
+            seen.add(r.id);
+            return true;
+          });
+          setPlannedCount(data.length);
+        } else if (activeTab === "revision") {
+          const res = await apiClient.get(
+            "/overtime/pending-approval/list?status=REVISION_REQUESTED",
+          );
+          data = res.data.data || [];
+          setRevisionCount(data.length);
+        } else if (activeTab === "approved") {
+          const res = await apiClient.get(
+            "/overtime/pending-approval/list?status=APPROVED",
+          );
+          data = res.data.data || [];
+        } else if (activeTab === "rejected") {
+          const res = await apiClient.get(
+            "/overtime/pending-approval/list?status=REJECTED",
+          );
+          data = res.data.data || [];
+        } else {
+          // all tab — fetch all relevant statuses
+          const statuses = [
+            "PENDING",
+            "PLAN_PENDING",
+            "PLAN_APPROVED",
+            "REVISION_REQUESTED",
+            "APPROVED",
+            "REJECTED",
+          ];
+          const results = await Promise.allSettled(
+            statuses.map((s) =>
+              apiClient.get(`/overtime/pending-approval/list?status=${s}`),
+            ),
+          );
+          const seen = new Set();
+          data = results
+            .filter((r) => r.status === "fulfilled")
+            .flatMap((r) => r.value.data.data || [])
+            .filter((r) => {
+              if (seen.has(r.id)) return false;
+              seen.add(r.id);
+              return true;
+            });
+          const count = data.filter(
+            (r) => r.status === "PENDING" || r.status === "PLAN_PENDING",
+          ).length;
+          setPendingCount(count);
+          const pCount = data.filter(
+            (r) => r.status === "PLAN_PENDING" || r.status === "PLAN_APPROVED",
+          ).length;
+          setPlannedCount(pCount);
+        }
       }
-      setAllRequests(response.data.data || []);
-      setRequests(response.data.data || []);
+
+      setAllRequests(data);
+      setRequests(data);
     } catch (error) {
       console.error("Fetch error:", error);
       alert(t("overtime.fetchFailed"));
@@ -186,16 +340,17 @@ export default function OvertimeApproval() {
 
     setLoading(true);
     try {
-      const endpoint =
-        actionType === "approve"
-          ? "approve"
-          : actionType === "reject"
-            ? "reject"
-            : "request-revision";
+      const endpointMap = {
+        approve: "approve",
+        "approve-plan": "approve-plan", // ✅ V2: plan approval
+        reject: "reject",
+        revision: "request-revision",
+      };
 
-      await apiClient.post(`/overtime/${selectedRequest.id}/${endpoint}`, {
-        comment: comment || null,
-      });
+      await apiClient.post(
+        `/overtime/${selectedRequest.id}/${endpointMap[actionType]}`,
+        { comment: comment || null },
+      );
 
       alert(t("overtime.actionSuccess"));
       setShowModal(false);
@@ -217,18 +372,35 @@ export default function OvertimeApproval() {
     setShowModal(true);
   };
 
-  const getStatusBadge = (status) => {
+  const getStatusBadge = (status, isIncidental) => {
     const styles = {
       PENDING: "bg-yellow-100 text-yellow-800",
       APPROVED: "bg-green-100 text-green-800",
       REJECTED: "bg-red-100 text-red-800",
       REVISION_REQUESTED: "bg-orange-100 text-orange-800",
+      PLAN_PENDING: "bg-blue-100 text-blue-800",
+      PLAN_APPROVED: "bg-teal-100 text-teal-800",
+      PENDING_ACTUALIZATION: "bg-purple-100 text-purple-800",
+    };
+    const labels = {
+      PENDING: "Pending",
+      APPROVED: "Approved",
+      REJECTED: "Rejected",
+      REVISION_REQUESTED: "Revision Requested",
+      PLAN_PENDING: "Plan Pending",
+      PLAN_APPROVED: "Plan Approved",
+      PENDING_ACTUALIZATION: "Needs Actualization",
     };
     return (
       <span
-        className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${styles[status] || "bg-gray-100 text-gray-800"}`}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${styles[status] || "bg-gray-100 text-gray-800"}`}
       >
-        {status.replace("_", " ")}
+        {labels[status] || status.replace(/_/g, " ")}
+        {/* {isIncidental && (
+          <span className="px-1.5 py-0.5 bg-orange-500 text-white text-xs rounded-full font-semibold">
+            insidentil
+          </span>
+        )}*/}
       </span>
     );
   };
@@ -260,344 +432,364 @@ export default function OvertimeApproval() {
             className="flex sm:hidden overflow-x-auto scrollbar-hide px-2"
             aria-label="Tabs"
           >
-            <button
-              onClick={() => setActiveTab("pending")}
-              className={`flex-shrink-0 py-3 px-3 border-b-2 font-medium text-xs whitespace-nowrap ${
-                activeTab === "pending"
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500"
-              }`}
-            >
-              {t("overtime.pending")}
-              {pendingCount > 0 && (
-                <span className="ml-2 px-1.5 py-0.5 bg-red-500 text-white text-xs rounded-full">
-                  {pendingCount}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab("revision")}
-              className={`flex-shrink-0 py-3 px-3 border-b-2 font-medium text-xs whitespace-nowrap ${
-                activeTab === "revision"
-                  ? "border-orange-500 text-orange-600"
-                  : "border-transparent text-gray-500"
-              }`}
-            >
-              {t("overtime.revision")}
-              {revisionCount > 0 && (
-                <span className="ml-2 px-1.5 py-0.5 bg-orange-500 text-white text-xs rounded-full">
-                  {revisionCount}
-                </span>
-              )}
-            </button>
-            {isAdmin && (
-              <>
+            {[
+              {
+                key: "pending",
+                label: t("overtime.pending"),
+                color: "border-blue-500 text-blue-600",
+                badge: pendingCount,
+                badgeColor: "bg-red-500",
+                show: true,
+              },
+              {
+                key: "planned",
+                label: "Planned",
+                color: "border-teal-500 text-teal-600",
+                badge: plannedCount,
+                badgeColor: "bg-teal-500",
+                show: isPreMode,
+              },
+              {
+                key: "revision",
+                label: t("overtime.revision"),
+                color: "border-orange-500 text-orange-600",
+                badge: revisionCount,
+                badgeColor: "bg-orange-500",
+                show: true,
+              },
+              {
+                key: "approved",
+                label: t("overtime.approved"),
+                color: "border-green-500 text-green-600",
+                badge: 0,
+                badgeColor: "",
+                show: true,
+              },
+              {
+                key: "rejected",
+                label: t("overtime.rejected"),
+                color: "border-red-500 text-red-600",
+                badge: 0,
+                badgeColor: "",
+                show: true,
+              },
+              {
+                key: "all",
+                label: t("overtime.allRequests"),
+                color: "border-gray-500 text-gray-700",
+                badge: 0,
+                badgeColor: "",
+                show: true,
+              },
+            ]
+              .filter((tab) => tab.show)
+              .map(({ key, label, color, badge, badgeColor }) => (
                 <button
-                  onClick={() => setActiveTab("all")}
+                  key={key}
+                  onClick={() => setActiveTab(key)}
                   className={`flex-shrink-0 py-3 px-3 border-b-2 font-medium text-xs whitespace-nowrap ${
-                    activeTab === "all"
-                      ? "border-blue-500 text-blue-600"
+                    activeTab === key
+                      ? color
                       : "border-transparent text-gray-500"
                   }`}
                 >
-                  {t("overtime.allRequests")}
+                  {label}
+                  {badge > 0 && (
+                    <span
+                      className={`ml-1.5 px-1.5 py-0.5 ${badgeColor} text-white text-xs rounded-full`}
+                    >
+                      {badge}
+                    </span>
+                  )}
                 </button>
-                <button
-                  onClick={() => setActiveTab("approved")}
-                  className={`flex-shrink-0 py-3 px-3 border-b-2 font-medium text-xs whitespace-nowrap ${
-                    activeTab === "approved"
-                      ? "border-green-500 text-green-600"
-                      : "border-transparent text-gray-500"
-                  }`}
-                >
-                  {t("overtime.approved")}
-                </button>
-                <button
-                  onClick={() => setActiveTab("rejected")}
-                  className={`flex-shrink-0 py-3 px-3 border-b-2 font-medium text-xs whitespace-nowrap ${
-                    activeTab === "rejected"
-                      ? "border-red-500 text-red-600"
-                      : "border-transparent text-gray-500"
-                  }`}
-                >
-                  {t("overtime.rejected")}
-                </button>
-              </>
-            )}
+              ))}
           </nav>
 
           {/* Desktop: Normal flex tabs */}
-          <nav className="hidden sm:flex space-x-8 px-6" aria-label="Tabs">
-            <button
-              onClick={() => setActiveTab("pending")}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === "pending"
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
-            >
-              {t("overtime.pending")}
-              {pendingCount > 0 && (
-                <span className="ml-2 px-1.5 py-0.5 bg-red-500 text-white text-xs rounded-full">
-                  {pendingCount}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab("revision")}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === "revision"
-                  ? "border-orange-500 text-orange-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
-            >
-              {t("overtime.revision")}
-            </button>
-            {isAdmin && (
-              <>
+          <nav
+            className="hidden sm:flex space-x-6 px-6 overflow-x-auto"
+            aria-label="Tabs"
+          >
+            {[
+              {
+                key: "pending",
+                label: t("overtime.pending"),
+                color: "border-blue-500 text-blue-600",
+                badge: pendingCount,
+                badgeColor: "bg-red-500",
+                show: true,
+              },
+              {
+                key: "planned",
+                label: "Planned",
+                color: "border-teal-500 text-teal-600",
+                badge: plannedCount,
+                badgeColor: "bg-teal-500",
+                show: isPreMode,
+              },
+              {
+                key: "revision",
+                label: t("overtime.revision"),
+                color: "border-orange-500 text-orange-600",
+                badge: revisionCount,
+                badgeColor: "bg-orange-500",
+                show: true,
+              },
+              {
+                key: "approved",
+                label: t("overtime.approved"),
+                color: "border-green-500 text-green-600",
+                badge: 0,
+                badgeColor: "",
+                show: true,
+              },
+              {
+                key: "rejected",
+                label: t("overtime.rejected"),
+                color: "border-red-500 text-red-600",
+                badge: 0,
+                badgeColor: "",
+                show: true,
+              },
+              {
+                key: "all",
+                label: t("overtime.allRequests"),
+                color: "border-gray-500 text-gray-700",
+                badge: 0,
+                badgeColor: "",
+                show: true,
+              },
+            ]
+              .filter((tab) => tab.show)
+              .map(({ key, label, color, badge, badgeColor }) => (
                 <button
-                  onClick={() => setActiveTab("all")}
-                  className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                    activeTab === "all"
-                      ? "border-blue-500 text-blue-600"
+                  key={key}
+                  onClick={() => setActiveTab(key)}
+                  className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                    activeTab === key
+                      ? color
                       : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                   }`}
                 >
-                  {t("overtime.allRequests")}
+                  {label}
+                  {badge > 0 && (
+                    <span
+                      className={`ml-2 px-1.5 py-0.5 ${badgeColor} text-white text-xs rounded-full`}
+                    >
+                      {badge}
+                    </span>
+                  )}
                 </button>
-                <button
-                  onClick={() => setActiveTab("approved")}
-                  className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                    activeTab === "approved"
-                      ? "border-green-500 text-green-600"
-                      : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                  }`}
-                >
-                  {t("overtime.approved")}
-                </button>
-                <button
-                  onClick={() => setActiveTab("rejected")}
-                  className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                    activeTab === "rejected"
-                      ? "border-red-500 text-red-600"
-                      : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                  }`}
-                >
-                  {t("overtime.rejected")}
-                </button>
-              </>
-            )}
+              ))}
           </nav>
         </div>
 
         {/* Filters Section - Mobile Optimized */}
-        {isAdmin && (
-          <div className="p-4 sm:p-6 border-b border-gray-200">
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center text-sm font-medium text-gray-700 hover:text-gray-900"
+        <div className="p-4 sm:p-6 border-b border-gray-200">
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className="flex items-center text-sm font-medium text-gray-700 hover:text-gray-900"
+          >
+            <svg
+              className="w-5 h-5 mr-2 flex-shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
             >
-              <svg
-                className="w-5 h-5 mr-2 flex-shrink-0"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
-                />
-              </svg>
-              <span className="truncate">
-                {showFilters
-                  ? t("overtime.hideFilters")
-                  : t("overtime.showFilters")}
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+              />
+            </svg>
+            <span className="truncate">
+              {showFilters
+                ? t("overtime.hideFilters")
+                : t("overtime.showFilters")}
+            </span>
+            {hasActiveFilters && (
+              <span className="ml-2 px-2 py-1 text-xs bg-blue-100 text-blue-600 rounded-full flex-shrink-0">
+                {Object.values(filters).filter((v) => v !== "").length}
               </span>
-              {hasActiveFilters && (
-                <span className="ml-2 px-2 py-1 text-xs bg-blue-100 text-blue-600 rounded-full flex-shrink-0">
-                  {Object.values(filters).filter((v) => v !== "").length}
-                </span>
-              )}
-            </button>
-
-            {showFilters && (
-              <div className="mt-4 space-y-4 sm:space-y-0 sm:grid sm:grid-cols-2 lg:grid-cols-3 sm:gap-4 lg:gap-6">
-                {/* Division Filter */}
-                <div className="border-l-4 border-blue-500 pl-3 sm:pl-4">
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    {t("overtime.division")}
-                  </label>
-                  <select
-                    value={filters.divisionId}
-                    onChange={(e) =>
-                      setFilters({ ...filters, divisionId: e.target.value })
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="">{t("overtime.allDivisions")}</option>
-                    {divisions.map((div) => (
-                      <option key={div.id} value={div.id}>
-                        {div.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Search Filter */}
-                <div className="border-l-4 border-green-500 pl-3 sm:pl-4">
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    {t("overtime.searchEmployee")}
-                  </label>
-                  <input
-                    type="text"
-                    value={filters.search}
-                    onChange={(e) =>
-                      setFilters({ ...filters, search: e.target.value })
-                    }
-                    placeholder={t("overtime.searchPlaceholder")}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-
-                {/* Request Date Range */}
-                <div className="border-l-4 border-yellow-500 pl-3 sm:pl-4">
-                  <p className="text-sm font-semibold text-gray-700 mb-2">
-                    {t("overtime.requestDateRange")}
-                  </p>
-                  <div className="space-y-2">
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">
-                        {t("overtime.from")}
-                      </label>
-                      <input
-                        type="date"
-                        value={filters.requestDateFrom}
-                        onChange={(e) =>
-                          setFilters({
-                            ...filters,
-                            requestDateFrom: e.target.value,
-                          })
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">
-                        {t("overtime.to")}
-                      </label>
-                      <input
-                        type="date"
-                        value={filters.requestDateTo}
-                        onChange={(e) =>
-                          setFilters({
-                            ...filters,
-                            requestDateTo: e.target.value,
-                          })
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Overtime Date Range */}
-                <div className="border-l-4 border-orange-500 pl-3 sm:pl-4">
-                  <p className="text-sm font-semibold text-gray-700 mb-2">
-                    {t("overtime.overtimeDateRange")}
-                  </p>
-                  <div className="space-y-2">
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">
-                        {t("overtime.from")}
-                      </label>
-                      <input
-                        type="date"
-                        value={filters.overtimeDateFrom}
-                        onChange={(e) =>
-                          setFilters({
-                            ...filters,
-                            overtimeDateFrom: e.target.value,
-                          })
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">
-                        {t("overtime.to")}
-                      </label>
-                      <input
-                        type="date"
-                        value={filters.overtimeDateTo}
-                        onChange={(e) =>
-                          setFilters({
-                            ...filters,
-                            overtimeDateTo: e.target.value,
-                          })
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Hours Range */}
-                <div className="border-l-4 border-purple-500 pl-3 sm:pl-4">
-                  <p className="text-sm font-semibold text-gray-700 mb-2">
-                    {t("overtime.hoursRange")}
-                  </p>
-                  <div className="grid grid-cols-2 gap-2 sm:gap-4">
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">
-                        {t("overtime.minHours")}
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        value={filters.hoursMin}
-                        onChange={(e) =>
-                          setFilters({ ...filters, hoursMin: e.target.value })
-                        }
-                        placeholder="e.g., 8"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">
-                        {t("overtime.maxHours")}
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        value={filters.hoursMax}
-                        onChange={(e) =>
-                          setFilters({ ...filters, hoursMax: e.target.value })
-                        }
-                        placeholder="e.g., 40"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {hasActiveFilters && (
-                  <div className="flex justify-end sm:col-span-2 lg:col-span-3">
-                    <button
-                      onClick={clearFilters}
-                      className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 font-medium hover:bg-gray-50 rounded-lg transition-colors"
-                    >
-                      {t("overtime.clearAll")}
-                    </button>
-                  </div>
-                )}
-              </div>
             )}
-          </div>
-        )}
+          </button>
+
+          {showFilters && (
+            <div className="mt-4 space-y-4 sm:space-y-0 sm:grid sm:grid-cols-2 lg:grid-cols-3 sm:gap-4 lg:gap-6">
+              {/* Division Filter */}
+              <div className="border-l-4 border-blue-500 pl-3 sm:pl-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  {t("overtime.division")}
+                </label>
+                <select
+                  value={filters.divisionId}
+                  onChange={(e) =>
+                    setFilters({ ...filters, divisionId: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">{t("overtime.allDivisions")}</option>
+                  {divisions.map((div) => (
+                    <option key={div.id} value={div.id}>
+                      {div.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Search Filter */}
+              <div className="border-l-4 border-green-500 pl-3 sm:pl-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  {t("overtime.searchEmployee")}
+                </label>
+                <input
+                  type="text"
+                  value={filters.search}
+                  onChange={(e) =>
+                    setFilters({ ...filters, search: e.target.value })
+                  }
+                  placeholder={t("overtime.searchPlaceholder")}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Request Date Range */}
+              <div className="border-l-4 border-yellow-500 pl-3 sm:pl-4">
+                <p className="text-sm font-semibold text-gray-700 mb-2">
+                  {t("overtime.requestDateRange")}
+                </p>
+                <div className="space-y-2">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">
+                      {t("overtime.from")}
+                    </label>
+                    <input
+                      type="date"
+                      value={filters.requestDateFrom}
+                      onChange={(e) =>
+                        setFilters({
+                          ...filters,
+                          requestDateFrom: e.target.value,
+                        })
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">
+                      {t("overtime.to")}
+                    </label>
+                    <input
+                      type="date"
+                      value={filters.requestDateTo}
+                      onChange={(e) =>
+                        setFilters({
+                          ...filters,
+                          requestDateTo: e.target.value,
+                        })
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Overtime Date Range */}
+              <div className="border-l-4 border-orange-500 pl-3 sm:pl-4">
+                <p className="text-sm font-semibold text-gray-700 mb-2">
+                  {t("overtime.overtimeDateRange")}
+                </p>
+                <div className="space-y-2">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">
+                      {t("overtime.from")}
+                    </label>
+                    <input
+                      type="date"
+                      value={filters.overtimeDateFrom}
+                      onChange={(e) =>
+                        setFilters({
+                          ...filters,
+                          overtimeDateFrom: e.target.value,
+                        })
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">
+                      {t("overtime.to")}
+                    </label>
+                    <input
+                      type="date"
+                      value={filters.overtimeDateTo}
+                      onChange={(e) =>
+                        setFilters({
+                          ...filters,
+                          overtimeDateTo: e.target.value,
+                        })
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Hours Range */}
+              <div className="border-l-4 border-purple-500 pl-3 sm:pl-4">
+                <p className="text-sm font-semibold text-gray-700 mb-2">
+                  {t("overtime.hoursRange")}
+                </p>
+                <div className="grid grid-cols-2 gap-2 sm:gap-4">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">
+                      {t("overtime.minHours")}
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={filters.hoursMin}
+                      onChange={(e) =>
+                        setFilters({ ...filters, hoursMin: e.target.value })
+                      }
+                      placeholder="e.g., 8"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">
+                      {t("overtime.maxHours")}
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={filters.hoursMax}
+                      onChange={(e) =>
+                        setFilters({ ...filters, hoursMax: e.target.value })
+                      }
+                      placeholder="e.g., 40"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {hasActiveFilters && (
+                <div className="flex justify-end sm:col-span-2 lg:col-span-3">
+                  <button
+                    onClick={clearFilters}
+                    className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 font-medium hover:bg-gray-50 rounded-lg transition-colors"
+                  >
+                    {t("overtime.clearAll")}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Results */}
         {loading ? (
@@ -655,13 +847,13 @@ export default function OvertimeApproval() {
                       </p>
                     </div>
                     <div className="sm:hidden">
-                      {getStatusBadge(request.status)}
+                      {getStatusBadge(request.status, request.isIncidental)}
                     </div>
                   </div>
 
                   {/* Status badge - Desktop only */}
-                  <div className="hidden sm:block mb-3">
-                    {getStatusBadge(request.status)}
+                  <div className="hidden sm:flex sm:items-center sm:gap-2 mb-3">
+                    {getStatusBadge(request.status, request.isIncidental)}
                   </div>
 
                   {/* Desktop Layout: Info Grid + Action Buttons side by side */}
@@ -775,7 +967,6 @@ export default function OvertimeApproval() {
                           alt=""
                           className="w-5 h-5 sm:hidden brightness-0 invert"
                         />
-                        {/* Desktop: Custom icon + text */}
                         <span className="hidden sm:flex items-center gap-2">
                           <span className="text-sm">
                             {t("overtime.viewDetails")}
@@ -783,14 +974,74 @@ export default function OvertimeApproval() {
                         </span>
                       </Link>
 
-                      {/* Approval Action buttons */}
+                      {/* ── V2: Plan approval button (PLAN_PENDING) ───────── */}
+                      {request.status === "PLAN_PENDING" && (
+                        <>
+                          <button
+                            onClick={() =>
+                              openActionModal(request, "approve-plan")
+                            }
+                            className="flex-1 sm:flex-none px-3 py-2 sm:px-4 bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-medium transition-colors flex items-center justify-center"
+                            title="Approve overtime plan"
+                          >
+                            <svg
+                              className="w-5 h-5 sm:hidden"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+                              />
+                            </svg>
+                            <span className="hidden sm:inline text-sm">
+                              Approve Plan
+                            </span>
+                          </button>
+                          <button
+                            onClick={() => openActionModal(request, "reject")}
+                            className="flex-1 sm:flex-none px-3 py-2 sm:px-4 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium transition-colors flex items-center justify-center"
+                            title={t("overtime.reject")}
+                          >
+                            <svg
+                              className="w-5 h-5 sm:hidden"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M6 18L18 6M6 6l12 12"
+                              />
+                            </svg>
+                            <span className="hidden sm:inline text-sm">
+                              {t("overtime.reject")}
+                            </span>
+                          </button>
+                        </>
+                      )}
+
+                      {/* Regular approval buttons (PENDING / REVISION_REQUESTED) */}
                       {(request.status === "PENDING" ||
                         request.status === "REVISION_REQUESTED") && (
                         <>
                           <button
                             onClick={() => openActionModal(request, "approve")}
-                            className="flex-1 sm:flex-none px-3 py-2 sm:px-4 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors flex items-center justify-center"
-                            title={t("overtime.approve")}
+                            className={`flex-1 sm:flex-none px-3 py-2 sm:px-4 text-white rounded-lg font-medium transition-colors flex items-center justify-center ${
+                              request.isIncidental
+                                ? "bg-orange-500 hover:bg-orange-600"
+                                : "bg-green-600 hover:bg-green-700"
+                            }`}
+                            title={
+                              request.isIncidental
+                                ? "Approve Incidental OT"
+                                : t("overtime.approve")
+                            }
                           >
                             <svg
                               className="w-5 h-5 sm:hidden"
@@ -806,7 +1057,9 @@ export default function OvertimeApproval() {
                               />
                             </svg>
                             <span className="hidden sm:inline text-sm">
-                              {t("overtime.approve")}
+                              {request.isIncidental
+                                ? "Approve Incidental"
+                                : t("overtime.approve")}
                             </span>
                           </button>
                           <button
@@ -857,6 +1110,18 @@ export default function OvertimeApproval() {
                       )}
                     </div>
                   </div>
+
+                  {/* ── V2: Incidental reason shown to approver ───────────── */}
+                  {request.isIncidental && request.incidentalReason && (
+                    <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                      <p className="text-xs font-semibold text-orange-800 mb-1">
+                        Why no prior plan was submitted:
+                      </p>
+                      <p className="text-xs text-orange-700">
+                        {request.incidentalReason}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -871,12 +1136,40 @@ export default function OvertimeApproval() {
             <div className="p-4 sm:p-6">
               <h2 className="text-lg sm:text-xl font-bold mb-4 capitalize">
                 {actionType === "approve"
-                  ? t("overtime.approve")
-                  : actionType === "reject"
-                    ? t("overtime.reject")
-                    : t("overtime.requestRevision")}{" "}
-                {t("overtime.overtimeRequest")}
+                  ? selectedRequest?.isIncidental
+                    ? "Approve Incidental Overtime"
+                    : t("overtime.approve")
+                  : actionType === "approve-plan"
+                    ? "Approve Overtime Plan"
+                    : actionType === "reject"
+                      ? t("overtime.reject")
+                      : t("overtime.requestRevision")}{" "}
+                {actionType !== "approve-plan" && t("overtime.overtimeRequest")}
               </h2>
+
+              {/* ── V2: Plan approval info ──────────────────────────────── */}
+              {actionType === "approve-plan" && (
+                <div className="mb-4 p-3 bg-teal-50 border border-teal-200 rounded-lg text-xs text-teal-800">
+                  You are approving the <strong>overtime plan</strong>. The
+                  employee will be cleared to proceed with the planned overtime.
+                  They will be asked to submit their actual hours after the date
+                  passes.
+                </div>
+              )}
+
+              {/* ── V2: Incidental context for approver ────────────────── */}
+              {actionType === "approve" &&
+                selectedRequest?.isIncidental &&
+                selectedRequest?.incidentalReason && (
+                  <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                    <p className="text-xs font-semibold text-orange-800 mb-1">
+                      Employee's reason for no prior plan:
+                    </p>
+                    <p className="text-xs text-orange-700">
+                      {selectedRequest.incidentalReason}
+                    </p>
+                  </div>
+                )}
 
               <div className="mb-4 p-3 sm:p-4 bg-gray-50 rounded-lg space-y-2">
                 <p className="text-sm break-words">

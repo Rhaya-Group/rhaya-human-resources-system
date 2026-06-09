@@ -3,7 +3,6 @@ import express from "express";
 import * as overtimeController from "../controllers/overtime.controller.js";
 import {
   authenticate,
-  authorizeAdmin,
   requireActiveUser,
   requireRole,
 } from "../middleware/auth.js";
@@ -16,6 +15,8 @@ const router = express.Router();
 // ============================================
 
 // Submit new overtime request
+// Submit overtime (Flow 1 post | Flow 2A planned | Flow 2B incidental)
+// Body auto-detected from dates + policy
 router.post(
   "/submit",
   authenticate,
@@ -38,6 +39,22 @@ router.get(
 );
 
 // Edit pending overtime request
+// My requests awaiting actualization (Flow 2A only)
+router.get(
+  "/pending-actualization",
+  authenticate,
+  overtimeController.getPendingActualization,
+);
+
+// Actualize overtime (Flow 2A — submit actual hours after the date)
+router.post(
+  "/:requestId/actualize",
+  authenticate,
+  requireActiveUser,
+  overtimeController.actualizeOvertime,
+);
+
+// Edit/delete pending request
 router.put(
   "/:requestId",
   authenticate,
@@ -64,15 +81,21 @@ router.get(
 // APPROVER ROUTES
 // ============================================
 
-// Get requests pending my approval
+// List pending approvals
 router.get(
   "/pending-approval/list",
   authenticate,
   overtimeController.getPendingApprovals,
 );
 
-// Approve overtime request
-// router.post('/:requestId/approve', authenticate, overtimeController.approveOvertimeRequest);
+// Approve the PLAN (Flow 2A only — before the date)
+router.post(
+  "/:requestId/approve-plan",
+  authenticate,
+  overtimeController.approvePlan,
+);
+
+// Approve actual hours (Flow 1, 2B, 2A post-actualization)
 router.post(
   "/:requestId/approve",
   authenticate,
@@ -80,8 +103,7 @@ router.post(
   overtimeController.approveOvertimeRequest,
 );
 
-// Reject overtime request
-// router.post('/:requestId/reject', authenticate, overtimeController.rejectOvertimeRequest);
+// Reject (all flows)
 router.post(
   "/:requestId/reject",
   authenticate,
@@ -100,32 +122,36 @@ router.post(
 // ADMIN/HR ROUTES
 // ============================================
 
-// Get all overtime requests (with filters)
 router.get(
   "/admin/all-requests",
   authenticate,
   overtimeController.getAllOvertimeRequests,
 );
 
-// Process monthly balance (HR processes on 20th/4th week)
 router.post(
   "/admin/process-balance",
   authenticate,
   overtimeController.processMonthlyBalance,
 );
 
-// Reset employee balance
 router.post(
   "/admin/reset-balance/:userId",
   authenticate,
   overtimeController.resetEmployeeBalance,
 );
 
-// Get overtime statistics
 router.get(
   "/admin/statistics",
   authenticate,
   overtimeController.getOvertimeStatistics,
+);
+
+// Manually trigger actualization check (admin)
+router.post(
+  "/admin/trigger-actualization-check",
+  authenticate,
+  requireRole([1]),
+  overtimeController.triggerActualizationCheck,
 );
 
 router.post(
