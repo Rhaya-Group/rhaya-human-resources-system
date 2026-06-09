@@ -21,6 +21,8 @@ export const DEFAULT_POLICY = {
   overtimeRateHoliday: 3.0,
   lateToleranceMinutes: 15,
   internalPolicyUrl: null,
+  hrEmail: null,
+  smtpProfile: null,
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -50,6 +52,8 @@ function templateToPolicy(template, assignmentLabel) {
     overtimeRateHoliday: template.overtimeRateHoliday,
     lateToleranceMinutes: template.lateToleranceMinutes,
     internalPolicyUrl: template.internalPolicyUrl ?? null,
+    hrEmail: template.hrEmail ?? null,
+    smtpProfile: template.smtpProfile ?? null,
   };
 }
 
