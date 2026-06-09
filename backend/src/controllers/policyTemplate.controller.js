@@ -96,6 +96,8 @@ export const createTemplate = async (req, res) => {
       overtimeRateHoliday,
       lateToleranceMinutes,
       internalPolicyUrl,
+      hrEmail,
+      smtpProfile,
       notes,
     } = req.body;
 
@@ -126,6 +128,8 @@ export const createTemplate = async (req, res) => {
         overtimeRateHoliday: Number(overtimeRateHoliday ?? 3.0),
         lateToleranceMinutes: Number(lateToleranceMinutes ?? 15),
         internalPolicyUrl: internalPolicyUrl || null,
+        hrEmail: hrEmail || null,
+        smtpProfile: smtpProfile || null,
         notes,
       },
     });
@@ -158,6 +162,8 @@ export const updateTemplate = async (req, res) => {
       overtimeRateHoliday,
       lateToleranceMinutes,
       internalPolicyUrl,
+      hrEmail,
+      smtpProfile,
       notes,
     } = req.body;
 
@@ -194,6 +200,8 @@ export const updateTemplate = async (req, res) => {
       data.lateToleranceMinutes = Number(lateToleranceMinutes);
     if (internalPolicyUrl !== undefined)
       data.internalPolicyUrl = internalPolicyUrl || null;
+    if (hrEmail !== undefined) data.hrEmail = hrEmail || null;
+    if (smtpProfile !== undefined) data.smtpProfile = smtpProfile || null;
     if (notes !== undefined) data.notes = notes;
 
     const updated = await prisma.policyTemplate.update({ where: { id }, data });
@@ -290,12 +298,9 @@ export const createAssignments = async (req, res) => {
           .status(400)
           .json({ error: "Each target must have entityId or entityGroupId" });
       if (t.entityId && t.entityGroupId)
-        return res
-          .status(400)
-          .json({
-            error:
-              "Each target must have only one of entityId or entityGroupId",
-          });
+        return res.status(400).json({
+          error: "Each target must have only one of entityId or entityGroupId",
+        });
     }
 
     // Verify template exists
@@ -446,7 +451,12 @@ export const getMyPolicyUrl = async (req, res) => {
           where: { isActive: true },
           include: {
             template: {
-              select: { name: true, internalPolicyUrl: true, isActive: true },
+              select: {
+                name: true,
+                internalPolicyUrl: true,
+                isActive: true,
+                overtimeMode: true,
+              },
             },
           },
           orderBy: { priority: "desc" },
@@ -462,6 +472,7 @@ export const getMyPolicyUrl = async (req, res) => {
                     name: true,
                     internalPolicyUrl: true,
                     isActive: true,
+                    overtimeMode: true,
                   },
                 },
               },
@@ -485,12 +496,14 @@ export const getMyPolicyUrl = async (req, res) => {
       .sort((a, b) => b.priority - a.priority);
 
     const winner = allAssignments[0] ?? null;
-
+    console.log("Winner data : ", winner);
     res.json({
       success: true,
       data: {
         url: winner?.template?.internalPolicyUrl || null,
         label: winner?.label || winner?.template?.name || null,
+        overtimeMode:
+          winner?.overtimeMode || winner?.template?.overtimeMode || null,
       },
     });
   } catch (err) {
