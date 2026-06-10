@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { submitOvertimeRequest } from "../api/client";
+import apiClient from "../api/client";
 import { format, subDays, getDay, addDays } from "date-fns";
 import i18n from "../i18n";
 import DatePicker from "react-datepicker";
@@ -36,11 +37,8 @@ export default function OvertimeRequest() {
   // Calculate date limits
   const fetchLastRecapDate = async () => {
     try {
-      const response = await fetch("/api/overtime-recap/system-settings", {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      });
-      const data = await response.json();
-      setLastRecapDate(data.data?.lastRecapDate || null);
+      const res = await apiClient.get("/overtime-recap/system-settings");
+      setLastRecapDate(res.data?.data?.lastRecapDate || null);
     } catch (error) {
       console.error("Failed to fetch last recap date:", error);
     }
@@ -49,14 +47,9 @@ export default function OvertimeRequest() {
   // ── V2: Fetch entity overtime policy ───────────────────────────────────────
   const fetchOvertimePolicy = async () => {
     try {
-      const res = await fetch("/api/policy-templates/my-policy-url", {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      });
-      const data = await res.json();
-      // Reuse the resolved policy endpoint if available, else default 'post'
-      const resolvedMode = data.data?.overtimeMode || "post";
+      const res = await apiClient.get("/policy-templates/my-policy-url");
+      const resolvedMode = res.data?.data?.overtimeMode || "post";
       setOvertimeMode(resolvedMode);
-      console.log("overtime policy:", data);
     } catch (err) {
       console.error("Failed to fetch overtime policy:", err);
     }

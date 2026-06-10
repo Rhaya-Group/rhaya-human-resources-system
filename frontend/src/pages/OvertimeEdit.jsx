@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { getOvertimeRequestById, editOvertimeRequest } from "../api/client";
+import apiClient from "../api/client";
 import { format, subDays, addDays } from "date-fns";
 
 export default function OvertimeEdit() {
@@ -22,11 +23,8 @@ export default function OvertimeEdit() {
   // Calculate date limits
   const fetchLastRecapDate = async () => {
     try {
-      const response = await fetch("/api/overtime-recap/system-settings", {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      });
-      const data = await response.json();
-      setLastRecapDate(data.data?.lastRecapDate || null);
+      const res = await apiClient.get("/overtime-recap/system-settings");
+      setLastRecapDate(res.data?.data?.lastRecapDate || null);
     } catch (error) {
       console.error("Failed to fetch last recap date:", error);
     }
