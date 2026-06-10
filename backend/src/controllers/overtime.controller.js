@@ -226,13 +226,21 @@ export const submitOvertimeRequest = async (req, res) => {
     });
 
     // ── Log submission ──────────────────────────────────────────────────────
-    await revisionService.logSubmission(overtimeRequest.id, employeeId, {
-      totalHours,
-      totalAmount,
-      entries,
-      subFlow,
-      isIncidental: subFlow === "flow2b",
-    });
+    if (subFlow === "flow2a") {
+      await revisionService.logPlanSubmission(overtimeRequest.id, employeeId, {
+        totalHours,
+        totalAmount,
+        entries,
+      });
+    } else {
+      await revisionService.logSubmission(overtimeRequest.id, employeeId, {
+        totalHours,
+        totalAmount,
+        entries,
+        subFlow,
+        isIncidental: subFlow === "flow2b",
+      });
+    }
 
     // ── Update pending hours (only for actual-hours flows) ──────────────────
     // For flow2a (planned), we don't touch balance until actualization
@@ -344,6 +352,9 @@ export const approvePlan = async (req, res) => {
       include: { employee: true, entries: true },
     });
 
+    // Log plan approval
+    await revisionService.logPlanApprovalBySupervisor(requestId, approverId, comment);
+
     // Notify employee that plan is approved
     try {
       const { getEntityPolicy } = await import("../helpers/policyResolver.js");
@@ -400,9 +411,10 @@ export const actualizeOvertime = async (req, res) => {
         .status(403)
         .json({ error: "Not authorized to actualize this request" });
     }
-    if (request.status !== "PENDING_ACTUALIZATION") {
+    const actualizableStatuses = ["PENDING_ACTUALIZATION", "PLAN_APPROVED"];
+    if (!actualizableStatuses.includes(request.status)) {
       return res.status(400).json({
-        error: `Cannot actualize — status is "${request.status}". Only PENDING_ACTUALIZATION requests can be actualized.`,
+        error: `Cannot actualize — status is "${request.status}". Only PENDING_ACTUALIZATION or PLAN_APPROVED (with past dates) requests can be actualized.`,
       });
     }
 
@@ -519,6 +531,18 @@ export const actualizeOvertime = async (req, res) => {
       include: { entries: true, employee: true, currentApprover: true },
     });
 
+    // Log actualization
+    await revisionService.logActualization(requestId, employeeId, {
+      plannedHours: totalPlannedHours,
+      actualHours: totalActualHours,
+      exceedsPlanned,
+      newStatus,
+      entries: entries.map((e) => ({
+        entryId: e.entryId,
+        actualHours: e.actualHours,
+      })),
+    });
+
     return res.json({
       success: true,
       message: exceedsPlanned
@@ -632,6 +656,9 @@ export async function moveExpiredPlansToActualization() {
       where: { id: plan.id },
       data: { status: "PENDING_ACTUALIZATION" },
     });
+
+    // Log status transition
+    await revisionService.logMovedToActualization(plan.id, plan.employee.id);
 
     // Notify employee they need to actualize
     try {

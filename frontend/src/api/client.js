@@ -130,6 +130,15 @@ export const editOvertimeRequest = async (requestId, data) => {
 };
 
 /**
+ * Actualize overtime request (submit actual hours after overtime date passes)
+ * entries: [{ entryId, actualHours }]
+ */
+export const actualizeOvertimeRequest = async (requestId, entries) => {
+  const response = await apiClient.post(`/overtime/${requestId}/actualize`, { entries });
+  return response.data;
+};
+
+/**
  * Delete overtime request
  */
 export const deleteOvertimeRequest = async (requestId) => {

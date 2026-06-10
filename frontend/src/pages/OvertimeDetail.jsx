@@ -17,6 +17,9 @@ import {
   Edit3, // For revision
   User,
   ArrowLeft,
+  CalendarClock, // For plan submitted / moved to actualization
+  ClipboardCheck, // For plan approved
+  Zap, // For actualized
 } from "lucide-react";
 
 export default function OvertimeDetail() {
@@ -60,6 +63,11 @@ export default function OvertimeDetail() {
             icon: FileText,
             color: "blue",
           },
+          PLAN_SUBMITTED: {
+            label: "Overtime Plan Submitted",
+            icon: CalendarClock,
+            color: "blue",
+          },
           EDITED: {
             label: "Request Edited",
             icon: Edit3,
@@ -75,6 +83,11 @@ export default function OvertimeDetail() {
             label: "Rejected by Supervisor",
             icon: XCircle,
             color: "red",
+          },
+          PLAN_APPROVED_SPV: {
+            label: "Overtime Plan Approved by Supervisor",
+            icon: ClipboardCheck,
+            color: "teal",
           },
           APPROVED_DIVHEAD: {
             label: "Approved by Division Head",
@@ -118,6 +131,17 @@ export default function OvertimeDetail() {
             label: "Finally Rejected",
             icon: XCircle,
             color: "red",
+          },
+          MOVED_TO_ACTUALIZATION: {
+            label: "Overtime Date Passed — Actualization Required",
+            icon: CalendarClock,
+            color: "purple",
+          },
+          ACTUALIZED: {
+            label: "Actual Hours Submitted",
+            icon: Zap,
+            color: "purple",
+            showChanges: true,
           },
           DELETED: { label: "Request Deleted", icon: XCircle, color: "gray" },
         };
@@ -418,6 +442,20 @@ export default function OvertimeDetail() {
         text: "text-gray-600",
         textDark: "text-gray-900",
       },
+      teal: {
+        dot: "bg-teal-500",
+        bg: "bg-teal-50/50",
+        border: "border-teal-100",
+        text: "text-teal-600",
+        textDark: "text-teal-900",
+      },
+      purple: {
+        dot: "bg-purple-500",
+        bg: "bg-purple-50/50",
+        border: "border-purple-100",
+        text: "text-purple-600",
+        textDark: "text-purple-900",
+      },
     };
 
     const colors = colorClasses[event.color] || colorClasses.gray;
@@ -535,6 +573,34 @@ export default function OvertimeDetail() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Show actual vs planned for ACTUALIZED */}
+          {event.type === "ACTUALIZED" && event.changes && (
+            <div className="mt-3 bg-white/70 rounded-lg p-3 border border-purple-200 text-xs">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="font-bold text-gray-500 mb-1">Planned:</p>
+                  <p className="text-gray-700">{event.changes.plannedHours}h</p>
+                </div>
+                <div>
+                  <p className={`font-bold mb-1 ${event.changes.exceedsPlanned ? "text-orange-600" : "text-green-600"}`}>
+                    Actual:
+                  </p>
+                  <p className={event.changes.exceedsPlanned ? "text-orange-700" : "text-green-700"}>
+                    {event.changes.actualHours}h
+                    {event.changes.exceedsPlanned && " ⚠ exceeds plan"}
+                  </p>
+                </div>
+              </div>
+              <p className="mt-2 text-gray-500">
+                Result: <span className="font-semibold">
+                  {event.changes.newStatus === "APPROVED"
+                    ? "Auto-approved"
+                    : "Sent back to supervisor for re-approval"}
+                </span>
+              </p>
             </div>
           )}
 

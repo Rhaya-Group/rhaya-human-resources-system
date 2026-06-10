@@ -10,10 +10,12 @@ const prisma = new PrismaClient();
  * These define all the actions we track in the overtime workflow
  */
 export const REVISION_ACTIONS = {
-  SUBMITTED: 'SUBMITTED',                         // Initial submission
+  SUBMITTED: 'SUBMITTED',                         // Initial submission (post-mode)
+  PLAN_SUBMITTED: 'PLAN_SUBMITTED',               // Plan submitted (pre-mode, flow2a)
   EDITED: 'EDITED',                               // Employee edited request
-  APPROVED_SUPERVISOR: 'APPROVED_SUPERVISOR',     // Supervisor approved
+  APPROVED_SUPERVISOR: 'APPROVED_SUPERVISOR',     // Supervisor approved (post-mode)
   REJECTED_SUPERVISOR: 'REJECTED_SUPERVISOR',     // Supervisor rejected
+  PLAN_APPROVED_SPV: 'PLAN_APPROVED_SPV',         // Supervisor approved the plan (pre-mode)
   APPROVED_DIVHEAD: 'APPROVED_DIVHEAD',           // Division head approved
   REJECTED_DIVHEAD: 'REJECTED_DIVHEAD',           // Division head rejected
   REVISION_REQUESTED: 'REVISION_REQUESTED',       // Revision requested
@@ -22,6 +24,8 @@ export const REVISION_ACTIONS = {
   ADMIN_EDITED_REJECTED: 'ADMIN_EDITED_REJECTED', // Admin edited rejected overtime
   FINAL_APPROVED: 'FINAL_APPROVED',               // Final approval
   FINAL_REJECTED: 'FINAL_REJECTED',               // Final rejection
+  MOVED_TO_ACTUALIZATION: 'MOVED_TO_ACTUALIZATION', // Scheduler moved plan to actualization queue
+  ACTUALIZED: 'ACTUALIZED',                       // Employee submitted actual hours
   DELETED: 'DELETED'                              // Request deleted
 };
 
@@ -312,6 +316,78 @@ export const logDeletion = async (overtimeRequestId, userId, reason) => {
 };
 
 /**
+ * Log plan submission (pre-mode flow2a)
+ */
+export const logPlanSubmission = async (overtimeRequestId, employeeId, data) => {
+  return logRevision({
+    overtimeRequestId,
+    revisedBy: employeeId,
+    action: REVISION_ACTIONS.PLAN_SUBMITTED,
+    changes: {
+      totalHours: data.totalHours,
+      totalAmount: data.totalAmount,
+      entriesCount: data.entries?.length || 0,
+      entries: data.entries
+    },
+    comment: 'Overtime plan submitted — awaiting supervisor approval'
+  });
+};
+
+/**
+ * Log plan approved by supervisor (pre-mode)
+ */
+export const logPlanApprovalBySupervisor = async (overtimeRequestId, supervisorId, comment) => {
+  return logRevision({
+    overtimeRequestId,
+    revisedBy: supervisorId,
+    action: REVISION_ACTIONS.PLAN_APPROVED_SPV,
+    changes: {
+      approvedBy: 'supervisor',
+      previousStatus: 'PLAN_PENDING',
+      newStatus: 'PLAN_APPROVED'
+    },
+    comment: comment || 'Overtime plan approved by supervisor'
+  });
+};
+
+/**
+ * Log moved to actualization queue (by scheduler)
+ */
+export const logMovedToActualization = async (overtimeRequestId, employeeId) => {
+  return logRevision({
+    overtimeRequestId,
+    revisedBy: employeeId,
+    action: REVISION_ACTIONS.MOVED_TO_ACTUALIZATION,
+    changes: {
+      previousStatus: 'PLAN_APPROVED',
+      newStatus: 'PENDING_ACTUALIZATION'
+    },
+    comment: 'All overtime dates have passed — employee notified to submit actual hours'
+  });
+};
+
+/**
+ * Log actualization (employee submits actual hours)
+ */
+export const logActualization = async (overtimeRequestId, employeeId, data) => {
+  return logRevision({
+    overtimeRequestId,
+    revisedBy: employeeId,
+    action: REVISION_ACTIONS.ACTUALIZED,
+    changes: {
+      plannedHours: data.plannedHours,
+      actualHours: data.actualHours,
+      exceedsPlanned: data.exceedsPlanned,
+      newStatus: data.newStatus,
+      entries: data.entries
+    },
+    comment: data.exceedsPlanned
+      ? `Actual hours (${data.actualHours}h) exceed plan (${data.plannedHours}h) — sent back to supervisor`
+      : `Actual hours submitted (${data.actualHours}h) — auto-approved`
+  });
+};
+
+/**
  * Deduct overtime balance when admin rejects approved overtime
  * @param {string} employeeId - Employee ID
  * @param {number} hours - Number of hours to deduct
@@ -370,15 +446,19 @@ export default {
   logRevision,
   getRevisionHistory,
   logSubmission,
+  logPlanSubmission,
   logEdit,
   logSupervisorApproval,
   logSupervisorRejection,
+  logPlanApprovalBySupervisor,
   logDivisionHeadApproval,
   logDivisionHeadRejection,
   logRevisionRequest,
   logAdminRejection,
   logFinalApproval,
   logFinalRejection,
+  logMovedToActualization,
+  logActualization,
   logDeletion,
-  deductOvertimeBalance  
+  deductOvertimeBalance
 };

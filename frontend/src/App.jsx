@@ -16,6 +16,7 @@ import OvertimeRequest from "./pages/OvertimeRequest";
 import OvertimeHistory from "./pages/OvertimeHistory";
 import OvertimeDetail from "./pages/OvertimeDetail";
 import OvertimeEdit from "./pages/OvertimeEdit";
+import OvertimeActualize from "./pages/OvertimeActualize";
 import OvertimeApproval from "./pages/OvertimeApproval";
 import MyPayslips from "./pages/MyPayslips";
 import PayslipManagement from "./pages/PayslipManagement";
@@ -191,6 +192,15 @@ function App() {
             element={
               <ProtectedRoute>
                 <OvertimeEdit />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/overtime/actualize/:requestId"
+            element={
+              <ProtectedRoute>
+                <OvertimeActualize />
               </ProtectedRoute>
             }
           />
