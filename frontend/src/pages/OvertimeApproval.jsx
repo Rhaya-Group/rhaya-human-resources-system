@@ -946,9 +946,12 @@ export default function OvertimeApproval() {
                       {request.status !== "PENDING" &&
                         request.currentApprover && (
                           <p className="text-xs sm:text-sm text-gray-600">
-                            {request.status === "APPROVED"
+                            {request.status === "APPROVED" ||
+                            request.status === "PLAN_APPROVED"
                               ? `✓ ${t("overtime.approvedBy")}`
-                              : `✗ ${t("overtime.rejectedBy")}`}{" "}
+                              : request.status === "REJECTED"
+                                ? `✗ ${t("overtime.rejectedBy")}`
+                                : `↻ ${t("overtime.approvedBy")}`}{" "}
                             {request.currentApprover.name}
                           </p>
                         )}
@@ -973,6 +976,17 @@ export default function OvertimeApproval() {
                           </span>
                         </span>
                       </Link>
+
+                      {/* ── V2: PLAN_APPROVED awaiting actualization ─────── */}
+                      {request.status === "PLAN_APPROVED" &&
+                        request.entries?.length > 0 &&
+                        request.entries.every(
+                          (e) => new Date(e.date) <= new Date(),
+                        ) && (
+                          <span className="hidden sm:inline-flex items-center px-3 py-2 rounded-lg text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
+                            ⏰ Awaiting Actualization
+                          </span>
+                        )}
 
                       {/* ── V2: Plan approval button (PLAN_PENDING) ───────── */}
                       {request.status === "PLAN_PENDING" && (

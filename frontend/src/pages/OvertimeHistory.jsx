@@ -854,9 +854,13 @@ export default function OvertimeHistory() {
                   </p>
                   {request.status !== "PENDING" && request.currentApprover && (
                     <p className="text-gray-600">
-                      {request.status === "APPROVED"
+                      {request.status === "APPROVED" ||
+                      request.status === "PLAN_APPROVED" ||
+                      request.status === "PENDING_ACTUALIZATION"
                         ? `✓ ${t("overtime.approvedBy")}`
-                        : `✗ ${t("overtime.rejectedBy")}`}{" "}
+                        : request.status === "REJECTED"
+                          ? `✗ ${t("overtime.rejectedBy")}`
+                          : `↻ ${t("overtime.approvedBy")}`}{" "}
                       {request.currentApprover.name}
                     </p>
                   )}
@@ -896,18 +900,46 @@ export default function OvertimeHistory() {
                 )}
 
                 {/* ── V2: Plan approved info box ──────────────────────────── */}
-                {request.status === "PLAN_APPROVED" && (
-                  <div className="mt-3 p-3 bg-teal-50 rounded-lg border border-teal-200">
-                    <p className="text-xs font-semibold text-teal-800 mb-1">
-                      📋 Plan Approved
-                    </p>
-                    <p className="text-xs text-teal-700">
-                      Your overtime plan has been approved. After completing the
-                      overtime, you'll receive a reminder to submit your actual
-                      hours.
-                    </p>
-                  </div>
-                )}
+                {request.status === "PLAN_APPROVED" &&
+                  (() => {
+                    const allDatesPassed =
+                      request.entries?.length > 0 &&
+                      request.entries.every(
+                        (e) => new Date(e.date) <= new Date(),
+                      );
+                    return allDatesPassed ? (
+                      <div className="mt-3 p-3 bg-purple-50 rounded-lg border border-purple-200">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs font-semibold text-purple-800 mb-1">
+                              Actualization Required
+                            </p>
+                            <p className="text-xs text-purple-700">
+                              Your overtime date has passed. Please submit your
+                              actual hours worked.
+                            </p>
+                          </div>
+                          <Link
+                            to={`/overtime/actualize/${request.id}`}
+                            className="flex-shrink-0 px-3 py-1.5 bg-purple-600 text-white text-xs font-medium rounded-lg hover:bg-purple-700"
+                          >
+                            Actualize
+                          </Link>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-3 p-3 bg-teal-50 rounded-lg border border-teal-200">
+                        <p className="text-xs font-semibold text-teal-800 mb-1">
+                          Plan Approved
+                        </p>
+                        <p className="text-xs text-teal-700">
+                          Your overtime plan has been approved. After completing
+                          the overtime, you'll receive a reminder to submit your
+                          actual hours.
+                        </p>
+                      </div>
+                    );
+                  })()}
 
                 {/* ── V2: Actualization needed banner + button ────────────── */}
                 {request.status === "PENDING_ACTUALIZATION" && (
@@ -915,7 +947,7 @@ export default function OvertimeHistory() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="text-xs font-semibold text-purple-800 mb-1">
-                          ⏰ Actualization Required
+                          Actualization Required
                         </p>
                         <p className="text-xs text-purple-700">
                           Your overtime date has passed. Please submit your
