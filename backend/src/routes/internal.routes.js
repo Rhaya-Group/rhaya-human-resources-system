@@ -131,13 +131,42 @@ router.get("/entities", hmacAuth, async (req, res, next) => {
             isActive: true,
           },
         },
-        // _count: {
-        //   select: {
-        //     users: true,
-        //   },
-        // },
+        subgroupId: true,
+        subgroup: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            description: true,
+            color: true,
+            isActive: true,
+            groupId: true,
+          },
+        },
+        _count: {
+          select: {
+            users: true,
+          },
+        },
       },
       orderBy: { code: "asc" },
+    });
+
+    // Fetch all active entity subgroups
+    const entitySubgroups = await prisma.entitySubgroup.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        description: true,
+        color: true,
+        isActive: true,
+        groupId: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: { name: "asc" },
     });
 
     // Fetch all active entity groups
@@ -163,9 +192,8 @@ router.get("/entities", hmacAuth, async (req, res, next) => {
       name: company.name,
       description: company.description,
       isActive: company.isActive,
-      employeeCount: company._count.users,
+      employeeCount: company._count?.users ?? 0,
       groupId: company.groupId,
-      // Include full group object for backward compatibility
       group: company.group
         ? {
             id: company.group.id,
@@ -176,6 +204,31 @@ router.get("/entities", hmacAuth, async (req, res, next) => {
             isActive: company.group.isActive,
           }
         : null,
+      subgroupId: company.subgroupId,
+      subgroup: company.subgroup
+        ? {
+            id: company.subgroup.id,
+            code: company.subgroup.code,
+            name: company.subgroup.name,
+            description: company.subgroup.description,
+            color: company.subgroup.color,
+            isActive: company.subgroup.isActive,
+            groupId: company.subgroup.groupId,
+          }
+        : null,
+    }));
+
+    // Map subgroups for Legal CRM sync
+    const subgroups = entitySubgroups.map((s) => ({
+      id: s.id,
+      code: s.code,
+      name: s.name,
+      description: s.description,
+      color: s.color,
+      isActive: s.isActive,
+      groupId: s.groupId,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
     }));
 
     // Map groups for Legal CRM's group sync
@@ -194,16 +247,15 @@ router.get("/entities", hmacAuth, async (req, res, next) => {
       clientId: req.clientId,
       entityCount: entities.length,
       groupCount: groups.length,
+      subgroupCount: subgroups.length,
     });
 
-    // Response format matches Legal CRM's expectations:
-    // - entities array with groupId and employeeCount
-    // - groups array for syncing entity groups
     res.json({
       success: true,
       count: entities.length,
       entities,
-      groups, // Legal CRM will sync these
+      groups,
+      subgroups,
     });
   } catch (err) {
     console.error("[Internal] GET /entities error:", err);
