@@ -24,6 +24,7 @@ import policyTemplateRoutes from "./routes/policyTemplate.routes.js";
 import entitySubgroupRoutes from "./routes/entitySubgroup.routes.js";
 
 import leaveReminderTestRoutes from "./routes/leaveReminderTest.routes.js";
+import workStatusRoutes from "./routes/workStatus.routes.js";
 
 // Import middleware
 import { authenticateToken } from "./middleware/auth.js";
@@ -169,6 +170,8 @@ app.use("/api/entity-groups", entityGroupRoutes);
 app.use("/api/entity-subgroups", entitySubgroupRoutes);
 
 app.use("/api/policy-templates", policyTemplateRoutes);
+
+app.use("/api/work-status", workStatusRoutes);
 // ============================================
 // ERROR HANDLING
 // ============================================

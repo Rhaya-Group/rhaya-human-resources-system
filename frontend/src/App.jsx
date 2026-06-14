@@ -33,6 +33,8 @@ import CompanyDivisionManagement from "./pages/CompanyDivisionManagement";
 import EntityGroupManagement from "./pages/EntityGroupManagement";
 import PolicyTemplateManagement from "./pages/PolicyTemplateManagement";
 import EntitySubgroupManagement from "./pages/EntitySubgroupManagement";
+import WorkStatusDashboard from "./pages/WorkStatusDashboard";
+import AttendancePermissions from "./pages/AttendancePermissions";
 
 // Layout
 import Layout from "./components/Layout";
@@ -300,6 +302,25 @@ function App() {
             element={
               <ProtectedRoute requiredLevel={2}>
                 <OvertimeRecapManagement />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Work Status / Attendance */}
+          <Route
+            path="/attendance"
+            element={
+              <ProtectedRoute>
+                <WorkStatusDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/attendance/permissions"
+            element={
+              <ProtectedRoute allowedLevels={[1]}>
+                <AttendancePermissions />
               </ProtectedRoute>
             }
           />

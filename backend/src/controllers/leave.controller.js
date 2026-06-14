@@ -771,6 +771,43 @@ export const approveLeaveRequest = async (req, res) => {
     if (updatedRequest.status === "APPROVED") {
       await leaveService.updateLeaveBalance(updatedRequest);
 
+      // Upsert WorkStatus = LEAVE for each date in the leave range
+      try {
+        const leaveStart = new Date(updatedRequest.startDate);
+        const leaveEnd = new Date(updatedRequest.endDate);
+        const dateCursor = new Date(leaveStart);
+        dateCursor.setHours(0, 0, 0, 0);
+        const endCursor = new Date(leaveEnd);
+        endCursor.setHours(0, 0, 0, 0);
+        while (dateCursor <= endCursor) {
+          await prisma.workStatus.upsert({
+            where: {
+              employeeId_date: {
+                employeeId: updatedRequest.employeeId,
+                date: new Date(dateCursor),
+              },
+            },
+            create: {
+              employeeId: updatedRequest.employeeId,
+              date: new Date(dateCursor),
+              status: "LEAVE",
+              note: "Auto-set from approved leave request",
+              submittedBy: approverId,
+            },
+            update: {
+              status: "LEAVE",
+              note: "Auto-set from approved leave request",
+              submittedBy: approverId,
+            },
+          });
+          dateCursor.setDate(dateCursor.getDate() + 1);
+        }
+        console.log(`[WorkStatus] LEAVE set for ${updatedRequest.employeeId} from ${leaveStart.toDateString()} to ${leaveEnd.toDateString()}`);
+      } catch (wsErr) {
+        console.error("[WorkStatus] Failed to upsert LEAVE status:", wsErr.message);
+        // Non-fatal — don't block leave approval
+      }
+
       // Send approval email to employee
       try {
         const employee = await prisma.user.findUnique({

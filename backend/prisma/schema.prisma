@@ -76,6 +76,10 @@ model User {
   supervisor                                            User?                  @relation("Supervision", fields: [supervisorId], references: [id], onUpdate: NoAction)
   subordinates                                          User[]                 @relation("Supervision")
   step1ApprovedLeaves                                   LeaveRequest[]         @relation("LeaveStep1Approver")
+  workStatuses                                          WorkStatus[]           @relation("WorkStatusEmployee")
+  workStatusesSubmitted                                 WorkStatus[]           @relation("WorkStatusSubmitter")
+  attendanceViewPermissions                             AttendanceViewPermission[] @relation("AttendanceViewPermissions")
+  attendancePermissionsGranted                          AttendanceViewPermission[] @relation("AttendancePermissionsGranted")
 
   @@index([email])
   @@index([username])
@@ -683,4 +687,49 @@ model Offboarding {
   @@index([status])
   @@index([lastWorkingDay])
   @@map("Offboarding")
+}
+
+// ─── Work Status ──────────────────────────────────────────────────────────────
+// Tracks daily work location / attendance status per employee.
+// No row = WFO (default). LEAVE rows auto-created from approved leave requests.
+// Past dates are read-only; today + future are editable.
+
+model WorkStatus {
+  id          String   @id @default(cuid())
+  employeeId  String
+  date        DateTime @db.Date
+  status      String   @default("WFO")  // WFO | WFH | LEAVE | OUTSIDE_OFFICE
+  note        String?
+  submittedBy String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  employee    User     @relation("WorkStatusEmployee",  fields: [employeeId],  references: [id])
+  submitter   User     @relation("WorkStatusSubmitter", fields: [submittedBy], references: [id])
+
+  @@unique([employeeId, date])
+  @@index([date])
+  @@index([employeeId])
+  @@map("work_status")
+}
+
+// ─── Attendance View Permission ───────────────────────────────────────────────
+// Grants a specific account read access to work-status data for a scoped group.
+// scopeType: ENTITY (PlottingCompany) | SUBGROUP (EntitySubgroup) | GROUP (EntityGroup)
+// One user can hold multiple grants across different scopes.
+
+model AttendanceViewPermission {
+  id        String   @id @default(cuid())
+  userId    String
+  scopeType String   // ENTITY | SUBGROUP | GROUP
+  scopeId   String
+  grantedBy String
+  createdAt DateTime @default(now())
+
+  user      User     @relation("AttendanceViewPermissions",    fields: [userId],    references: [id])
+  granter   User     @relation("AttendancePermissionsGranted", fields: [grantedBy], references: [id])
+
+  @@unique([userId, scopeType, scopeId])
+  @@index([userId])
+  @@map("attendance_view_permissions")
 }

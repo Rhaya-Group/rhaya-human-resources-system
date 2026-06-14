@@ -322,3 +322,66 @@ export const getAllLeaveRequests = async (params = {}) => {
   const response = await apiClient.get("/leave/admin/all-requests", { params });
   return response.data.data;
 };
+
+// ============================================
+// WORK STATUS FUNCTIONS
+// ============================================
+
+/**
+ * Get work statuses (today or date range)
+ * params: { date?, startDate?, endDate? }
+ */
+export const getWorkStatuses = async (params = {}) => {
+  const response = await apiClient.get("/work-status", { params });
+  return response.data;
+};
+
+/**
+ * Set work status for an employee on a date
+ * body: { employeeId, date, status, note? }
+ */
+export const setWorkStatus = async (body) => {
+  const response = await apiClient.post("/work-status", body);
+  return response.data;
+};
+
+/**
+ * Delete a work status record (resets to WFO default)
+ */
+export const deleteWorkStatus = async (id) => {
+  const response = await apiClient.delete(`/work-status/${id}`);
+  return response.data;
+};
+
+/**
+ * Get attendance view permissions
+ */
+export const getAttendancePermissions = async () => {
+  const response = await apiClient.get("/work-status/permissions");
+  return response.data;
+};
+
+/**
+ * Grant attendance view permission (L1 admin)
+ * body: { userId, scopeType, scopeId }
+ */
+export const grantAttendancePermission = async (body) => {
+  const response = await apiClient.post("/work-status/permissions", body);
+  return response.data;
+};
+
+/**
+ * Revoke attendance view permission (L1 admin)
+ */
+export const revokeAttendancePermission = async (id) => {
+  const response = await apiClient.delete(`/work-status/permissions/${id}`);
+  return response.data;
+};
+
+/**
+ * Search users for permission assignment (L1 admin)
+ */
+export const searchUsersForPermission = async (q) => {
+  const response = await apiClient.get("/work-status/permissions/users", { params: { q } });
+  return response.data;
+};
