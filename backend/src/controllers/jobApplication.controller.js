@@ -1,0 +1,240 @@
+// backend/src/controllers/jobApplication.controller.js
+// Candidate side (req.applicant): apply, list own, withdraw.
+// HR side (req.user, entity-scoped): list by posting, detail, advance stage, add note.
+// Every stage change / note writes an ApplicationEvent (pipeline audit trail).
+
+import prisma from "../config/database.js";
+import { canAccessEntity } from "./jobPosting.controller.js";
+
+const STAGES = ["APPLIED", "SCREENING", "INTERVIEW", "OFFER", "HIRED", "REJECTED"];
+
+// ─── Candidate ─────────────────────────────────────────────────────────────────
+
+// POST /api/recruitment/public/jobs/:id/apply   (applicantAuthenticate)
+export const apply = async (req, res) => {
+  try {
+    const jobPostingId = req.params.id;
+    const { coverLetter, resumeUrl } = req.body;
+
+    const posting = await prisma.jobPosting.findUnique({
+      where: { id: jobPostingId },
+      select: { id: true, status: true },
+    });
+    if (!posting || posting.status !== "OPEN") {
+      return res.status(404).json({ error: "Job not found or not open" });
+    }
+
+    const existing = await prisma.jobApplication.findUnique({
+      where: { jobPostingId_applicantId: { jobPostingId, applicantId: req.applicant.id } },
+    });
+    if (existing) {
+      return res.status(409).json({ error: "You have already applied to this job" });
+    }
+
+    const application = await prisma.jobApplication.create({
+      data: {
+        jobPostingId,
+        applicantId: req.applicant.id,
+        coverLetter: coverLetter || null,
+        resumeUrl: resumeUrl || req.applicant.resumeUrl || null,
+        events: {
+          create: {
+            type: "STAGE_CHANGE",
+            toStage: "APPLIED",
+            actorType: "APPLICANT",
+            actorId: req.applicant.id,
+          },
+        },
+      },
+    });
+    return res.status(201).json(application);
+  } catch (error) {
+    console.error("Apply error:", error);
+    return res.status(500).json({ error: "Failed to submit application" });
+  }
+};
+
+// GET /api/recruitment/my/applications   (applicantAuthenticate)
+export const listMine = async (req, res) => {
+  try {
+    const applications = await prisma.jobApplication.findMany({
+      where: { applicantId: req.applicant.id },
+      include: {
+        jobPosting: {
+          select: {
+            id: true, title: true, department: true, location: true, status: true,
+            plottingCompany: { select: { id: true, name: true } },
+          },
+        },
+      },
+      orderBy: { appliedAt: "desc" },
+    });
+    return res.json(applications);
+  } catch (error) {
+    console.error("List my applications error:", error);
+    return res.status(500).json({ error: "Failed to fetch applications" });
+  }
+};
+
+// DELETE /api/recruitment/my/applications/:id   (applicantAuthenticate)
+export const withdraw = async (req, res) => {
+  try {
+    const application = await prisma.jobApplication.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, applicantId: true },
+    });
+    if (!application || application.applicantId !== req.applicant.id) {
+      return res.status(404).json({ error: "Application not found" });
+    }
+    await prisma.jobApplication.delete({ where: { id: req.params.id } });
+    return res.json({ message: "Application withdrawn" });
+  } catch (error) {
+    console.error("Withdraw error:", error);
+    return res.status(500).json({ error: "Failed to withdraw application" });
+  }
+};
+
+// ─── HR ────────────────────────────────────────────────────────────────────────
+
+// Load an application + verify the HR user can access its posting's entity.
+async function loadScopedApplication(applicationId, user) {
+  const application = await prisma.jobApplication.findUnique({
+    where: { id: applicationId },
+    include: {
+      applicant: { select: { id: true, name: true, email: true, phone: true, resumeUrl: true } },
+      jobPosting: { select: { id: true, title: true, plottingCompanyId: true } },
+      events: { orderBy: { createdAt: "desc" } },
+    },
+  });
+  if (!application) return { error: 404 };
+  const allowed = await canAccessEntity(user, application.jobPosting.plottingCompanyId);
+  if (!allowed) return { error: 403 };
+  return { application };
+}
+
+// GET /api/recruitment/applications?postingId=...&stage=...   (HR, scoped)
+export const listForHr = async (req, res) => {
+  try {
+    const { postingId, stage } = req.query;
+    if (!postingId) {
+      return res.status(400).json({ error: "postingId query param is required" });
+    }
+
+    const posting = await prisma.jobPosting.findUnique({
+      where: { id: postingId },
+      select: { id: true, plottingCompanyId: true },
+    });
+    if (!posting) return res.status(404).json({ error: "Job posting not found" });
+    if (!(await canAccessEntity(req.user, posting.plottingCompanyId))) {
+      return res.status(403).json({ error: "Access denied for this entity" });
+    }
+
+    const where = { jobPostingId: postingId };
+    if (stage) where.stage = stage;
+
+    const applications = await prisma.jobApplication.findMany({
+      where,
+      include: {
+        applicant: { select: { id: true, name: true, email: true, phone: true, resumeUrl: true } },
+      },
+      orderBy: { appliedAt: "desc" },
+    });
+    return res.json(applications);
+  } catch (error) {
+    console.error("List applications (HR) error:", error);
+    return res.status(500).json({ error: "Failed to fetch applications" });
+  }
+};
+
+// GET /api/recruitment/applications/:id   (HR, scoped) — full detail + event timeline
+export const getForHr = async (req, res) => {
+  try {
+    const { application, error } = await loadScopedApplication(req.params.id, req.user);
+    if (error === 404) return res.status(404).json({ error: "Application not found" });
+    if (error === 403) return res.status(403).json({ error: "Access denied for this entity" });
+    return res.json(application);
+  } catch (error) {
+    console.error("Get application (HR) error:", error);
+    return res.status(500).json({ error: "Failed to fetch application" });
+  }
+};
+
+// PATCH /api/recruitment/applications/:id/stage   (HR, scoped)
+export const updateStage = async (req, res) => {
+  try {
+    const { stage, note, rejectedReason } = req.body;
+    if (!STAGES.includes(stage)) {
+      return res.status(400).json({ error: `stage must be one of ${STAGES.join(", ")}` });
+    }
+
+    const { application, error } = await loadScopedApplication(req.params.id, req.user);
+    if (error === 404) return res.status(404).json({ error: "Application not found" });
+    if (error === 403) return res.status(403).json({ error: "Access denied for this entity" });
+
+    const fromStage = application.stage;
+    if (fromStage === stage) {
+      return res.status(400).json({ error: "Application already at this stage" });
+    }
+
+    const [updated] = await prisma.$transaction([
+      prisma.jobApplication.update({
+        where: { id: application.id },
+        data: {
+          stage,
+          rejectedReason: stage === "REJECTED" ? rejectedReason || null : null,
+        },
+      }),
+      prisma.applicationEvent.create({
+        data: {
+          applicationId: application.id,
+          type: "STAGE_CHANGE",
+          fromStage,
+          toStage: stage,
+          note: note || null,
+          actorType: "HR",
+          actorId: req.user.id,
+        },
+      }),
+    ]);
+    return res.json(updated);
+  } catch (error) {
+    console.error("Update stage error:", error);
+    return res.status(500).json({ error: "Failed to update stage" });
+  }
+};
+
+// POST /api/recruitment/applications/:id/notes   (HR, scoped)
+export const addNote = async (req, res) => {
+  try {
+    const { note, scheduledAt, type = "NOTE" } = req.body;
+    if (!note && !scheduledAt) {
+      return res.status(400).json({ error: "note or scheduledAt is required" });
+    }
+    if (!["NOTE", "INTERVIEW_SCHEDULED"].includes(type)) {
+      return res.status(400).json({ error: "type must be NOTE or INTERVIEW_SCHEDULED" });
+    }
+
+    const { application, error } = await loadScopedApplication(req.params.id, req.user);
+    if (error === 404) return res.status(404).json({ error: "Application not found" });
+    if (error === 403) return res.status(403).json({ error: "Access denied for this entity" });
+
+    const event = await prisma.applicationEvent.create({
+      data: {
+        applicationId: application.id,
+        type,
+        note: note || null,
+        scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+        actorType: "HR",
+        actorId: req.user.id,
+      },
+    });
+    return res.status(201).json(event);
+  } catch (error) {
+    console.error("Add note error:", error);
+    return res.status(500).json({ error: "Failed to add note" });
+  }
+};
+
+export default {
+  apply, listMine, withdraw, listForHr, getForHr, updateStage, addNote,
+};

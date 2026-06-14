@@ -26,8 +26,16 @@ import entitySubgroupRoutes from "./routes/entitySubgroup.routes.js";
 import leaveReminderTestRoutes from "./routes/leaveReminderTest.routes.js";
 import workStatusRoutes from "./routes/workStatus.routes.js";
 
+// Recruitment module routes
+import applicantAuthRoutes from "./routes/applicantAuth.routes.js";
+import publicJobRoutes from "./routes/publicJob.routes.js";
+import applicantPortalRoutes from "./routes/applicantPortal.routes.js";
+import jobPostingRoutes from "./routes/jobPosting.routes.js";
+import jobApplicationRoutes from "./routes/jobApplication.routes.js";
+
 // Import middleware
-import { authenticateToken } from "./middleware/auth.js";
+import { authenticateToken, authenticate, authorizeHR } from "./middleware/auth.js";
+import { applicantAuthenticate } from "./middleware/applicantAuth.js";
 
 import schedulerService from "./services/scheduler.service.js";
 
@@ -43,11 +51,13 @@ const PORT = process.env.PORT || 3000;
 
 // CORS Configuration - Production Ready
 const allowedOrigins = [
-  "http://localhost:5173", // Development
+  "http://localhost:5173", // Development (HR app)
+  "http://localhost:5176", // Development (recruitment site)
   "http://localhost:3000", // Development
   "https://polyphyodont-dannielle-semiadhesive.ngrok-free.dev", // Development
   "https://rhaya-human-resources-system.pages.dev", // Production
   process.env.FRONTEND_URL, // From Railway env var
+  process.env.RECRUITMENT_URL, // Recruitment site domain (set in prod env)
   /\.pages\.dev$/, // All Cloudflare Pages subdomains
 ];
 
@@ -172,6 +182,17 @@ app.use("/api/entity-subgroups", entitySubgroupRoutes);
 app.use("/api/policy-templates", policyTemplateRoutes);
 
 app.use("/api/work-status", workStatusRoutes);
+
+// ── Recruitment module ────────────────────────────────────────────────────────
+// Candidate auth + public job board (no HR auth). Applying requires applicant token.
+app.use("/api/recruitment/applicant-auth", applicantAuthRoutes);
+app.use("/api/recruitment/public", publicJobRoutes);
+// Candidate's own application tracking (applicant token).
+app.use("/api/recruitment/my", applicantAuthenticate, applicantPortalRoutes);
+// HR-only, entity-scoped: postings CRUD + application pipeline (reuses existing User auth).
+app.use("/api/recruitment/jobs", authenticate, authorizeHR, jobPostingRoutes);
+app.use("/api/recruitment/applications", authenticate, authorizeHR, jobApplicationRoutes);
+
 // ============================================
 // ERROR HANDLING
 // ============================================
