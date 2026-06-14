@@ -774,22 +774,22 @@ export const approveLeaveRequest = async (req, res) => {
       // Upsert WorkStatus = LEAVE for each date in the leave range
       try {
         const leaveStart = new Date(updatedRequest.startDate);
-        const leaveEnd = new Date(updatedRequest.endDate);
-        const dateCursor = new Date(leaveStart);
-        dateCursor.setHours(0, 0, 0, 0);
-        const endCursor = new Date(leaveEnd);
-        endCursor.setHours(0, 0, 0, 0);
-        while (dateCursor <= endCursor) {
+        const leaveEnd   = new Date(updatedRequest.endDate);
+        // Use UTC midnight to avoid timezone-shifted date storage (e.g. UTC+7 bug)
+        const cursor = new Date(Date.UTC(leaveStart.getUTCFullYear(), leaveStart.getUTCMonth(), leaveStart.getUTCDate()));
+        const endUTC = new Date(Date.UTC(leaveEnd.getUTCFullYear(),   leaveEnd.getUTCMonth(),   leaveEnd.getUTCDate()));
+        while (cursor <= endUTC) {
+          const dateSnap = new Date(cursor); // snapshot before mutation
           await prisma.workStatus.upsert({
             where: {
               employeeId_date: {
                 employeeId: updatedRequest.employeeId,
-                date: new Date(dateCursor),
+                date: dateSnap,
               },
             },
             create: {
               employeeId: updatedRequest.employeeId,
-              date: new Date(dateCursor),
+              date: dateSnap,
               status: "LEAVE",
               note: "Auto-set from approved leave request",
               submittedBy: approverId,
@@ -800,7 +800,7 @@ export const approveLeaveRequest = async (req, res) => {
               submittedBy: approverId,
             },
           });
-          dateCursor.setDate(dateCursor.getDate() + 1);
+          cursor.setUTCDate(cursor.getUTCDate() + 1);
         }
         console.log(`[WorkStatus] LEAVE set for ${updatedRequest.employeeId} from ${leaveStart.toDateString()} to ${leaveEnd.toDateString()}`);
       } catch (wsErr) {

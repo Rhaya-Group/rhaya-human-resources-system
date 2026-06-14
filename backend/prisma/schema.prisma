@@ -78,6 +78,8 @@ model User {
   step1ApprovedLeaves                                   LeaveRequest[]         @relation("LeaveStep1Approver")
   workStatuses                                          WorkStatus[]           @relation("WorkStatusEmployee")
   workStatusesSubmitted                                 WorkStatus[]           @relation("WorkStatusSubmitter")
+  workStatusDefault                                     WorkStatusDefault?     @relation("WorkStatusDefault")
+  workStatusDefaultsSet                                 WorkStatusDefault[]    @relation("WorkStatusDefaultSetter")
   attendanceViewPermissions                             AttendanceViewPermission[] @relation("AttendanceViewPermissions")
   attendancePermissionsGranted                          AttendanceViewPermission[] @relation("AttendancePermissionsGranted")
 
@@ -732,4 +734,23 @@ model AttendanceViewPermission {
   @@unique([userId, scopeType, scopeId])
   @@index([userId])
   @@map("attendance_view_permissions")
+}
+
+// ─── Work Status Default ───────────────────────────────────────────────────────
+// Per-employee default attendance status applied to any day without an explicit record.
+// Employee or admin can set; applies to today and all future dates (used as fallback).
+
+model WorkStatusDefault {
+  id         String   @id @default(cuid())
+  employeeId String   @unique
+  status     String   @default("WFO")  // WFO | WFH | LEAVE | OUTSIDE_OFFICE
+  note       String?
+  setBy      String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  employee   User     @relation("WorkStatusDefault",       fields: [employeeId], references: [id])
+  setter     User     @relation("WorkStatusDefaultSetter", fields: [setBy],      references: [id])
+
+  @@map("work_status_defaults")
 }

@@ -26,7 +26,7 @@ export default function AttendancePermissions() {
 
   // Grant form state
   const [showForm, setShowForm] = useState(false);
-  const [formUser, setFormUser] = useState(null); // selected user
+  const [formUser, setFormUser] = useState(null);
   const [formScopeType, setFormScopeType] = useState("ENTITY");
   const [formScopeId, setFormScopeId] = useState("");
   const [formScopeName, setFormScopeName] = useState("");
@@ -35,19 +35,10 @@ export default function AttendancePermissions() {
   const [scopeOptions, setScopeOptions] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
-  // Redirect non-L1
-  if (!user || user.accessLevel !== 1) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center text-gray-500">
-          <Shield size={40} className="mx-auto mb-3 opacity-30" />
-          <p>This page is restricted to super admins only.</p>
-        </div>
-      </div>
-    );
-  }
+  const isAdmin = user?.accessLevel === 1;
 
   const fetchPermissions = useCallback(async () => {
+    if (!isAdmin) return;
     setLoading(true);
     try {
       const data = await getAttendancePermissions();
@@ -57,7 +48,7 @@ export default function AttendancePermissions() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
     fetchPermissions();
@@ -130,6 +121,18 @@ export default function AttendancePermissions() {
       alert(err.response?.data?.message || "Failed to revoke");
     }
   };
+
+  // Guard after all hooks
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center text-gray-500">
+          <Shield size={40} className="mx-auto mb-3 opacity-30" />
+          <p>This page is restricted to super admins only.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">

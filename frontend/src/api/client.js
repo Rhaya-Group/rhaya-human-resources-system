@@ -385,3 +385,47 @@ export const searchUsersForPermission = async (q) => {
   const response = await apiClient.get("/work-status/permissions/users", { params: { q } });
   return response.data;
 };
+
+/**
+ * Get work status default for an employee (own or admin querying another)
+ */
+export const getWorkStatusDefault = async (employeeId) => {
+  const params = employeeId ? { employeeId } : {};
+  const response = await apiClient.get("/work-status/defaults", { params });
+  return response.data;
+};
+
+/**
+ * Set work status default
+ * body: { status, note?, employeeId? }
+ */
+export const setWorkStatusDefault = async (body) => {
+  const response = await apiClient.post("/work-status/defaults", body);
+  return response.data;
+};
+
+/**
+ * Delete (reset) work status default
+ */
+export const deleteWorkStatusDefault = async (employeeId) => {
+  const response = await apiClient.delete(`/work-status/defaults/${employeeId}`);
+  return response.data;
+};
+
+/**
+ * Get personal calendar statuses (own data for a date range)
+ * params: { startDate, endDate }
+ */
+export const getMyCalendarStatuses = async (params) => {
+  const response = await apiClient.get("/work-status", { params: { ...params, myCalendar: "true" } });
+  return response.data;
+};
+
+/**
+ * Get Indonesian public holidays for a given year
+ * Returns [{ date: "YYYY-MM-DD", name, localName }]
+ */
+export const getHolidays = async (year) => {
+  const response = await apiClient.get("/work-status/holidays", { params: { year } });
+  return response.data;
+};
