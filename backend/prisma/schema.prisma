@@ -82,6 +82,7 @@ model User {
   workStatusDefaultsSet                                 WorkStatusDefault[]    @relation("WorkStatusDefaultSetter")
   attendanceViewPermissions                             AttendanceViewPermission[] @relation("AttendanceViewPermissions")
   attendancePermissionsGranted                          AttendanceViewPermission[] @relation("AttendancePermissionsGranted")
+  jobPostingsCreated                                    JobPosting[]               @relation("JobPostingCreator")
 
   @@index([email])
   @@index([username])
@@ -133,6 +134,7 @@ model PlottingCompany {
   policyAssignments  PolicyAssignment[]  @relation("EntityPolicyAssignments")
   subgroupId  String?
   subgroup    EntitySubgroup?  @relation(fields: [subgroupId], references: [id])
+  jobPostings JobPosting[]
 
   @@map("PlottingCompany")
 }
@@ -721,12 +723,13 @@ model WorkStatus {
 // One user can hold multiple grants across different scopes.
 
 model AttendanceViewPermission {
-  id        String   @id @default(cuid())
-  userId    String
-  scopeType String   // ENTITY | SUBGROUP | GROUP
-  scopeId   String
-  grantedBy String
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  userId     String
+  scopeType  String   // ENTITY | SUBGROUP | GROUP
+  scopeId    String
+  accessType String   @default("VIEW")  // VIEW | EDIT
+  grantedBy  String
+  createdAt  DateTime @default(now())
 
   user      User     @relation("AttendanceViewPermissions",    fields: [userId],    references: [id])
   granter   User     @relation("AttendancePermissionsGranted", fields: [grantedBy], references: [id])
@@ -753,4 +756,87 @@ model WorkStatusDefault {
   setter     User     @relation("WorkStatusDefaultSetter", fields: [setBy],      references: [id])
 
   @@map("work_status_defaults")
+}
+
+// ─── Recruitment ───────────────────────────────────────────────────────────────
+// Standalone recruitment website shares this backend + DB.
+// HR = existing User auth (entity-scoped). Candidates = separate Applicant table.
+
+model Applicant {
+  id           String           @id @default(cuid())
+  email        String           @unique
+  password     String                            // bcrypt (cost 10), same as auth.controller
+  name         String
+  phone        String?
+  resumeUrl    String?                           // optional default CV
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  applications JobApplication[]
+
+  @@map("applicants")
+}
+
+model JobPosting {
+  id                String           @id @default(cuid())
+  title             String
+  description       String                       // long text / markdown
+  department        String?
+  location          String?
+  employmentType    String           @default("FULL_TIME") // FULL_TIME|CONTRACT|INTERN
+  status            String           @default("DRAFT")      // DRAFT|OPEN|CLOSED
+  openings          Int              @default(1)
+  closeDate         DateTime?
+  plottingCompanyId String                       // entity scope anchor
+  createdById       String                       // HR User
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  plottingCompany   PlottingCompany  @relation(fields: [plottingCompanyId], references: [id])
+  createdBy         User             @relation("JobPostingCreator", fields: [createdById], references: [id])
+  applications      JobApplication[]
+
+  @@index([plottingCompanyId])
+  @@index([status])
+  @@map("job_postings")
+}
+
+model JobApplication {
+  id             String             @id @default(cuid())
+  jobPostingId   String
+  applicantId    String
+  stage          String             @default("APPLIED") // APPLIED|SCREENING|INTERVIEW|OFFER|HIRED|REJECTED
+  coverLetter    String?
+  resumeUrl      String?                          // per-application CV override
+  hrNotes        String?
+  rejectedReason String?
+  appliedAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  jobPosting     JobPosting         @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+  applicant      Applicant          @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  events         ApplicationEvent[]
+
+  @@unique([jobPostingId, applicantId])           // one application per posting per candidate
+  @@index([jobPostingId])
+  @@index([applicantId])
+  @@index([stage])
+  @@map("job_applications")
+}
+
+model ApplicationEvent {                          // pipeline audit trail
+  id            String         @id @default(cuid())
+  applicationId String
+  type          String                            // STAGE_CHANGE|NOTE|INTERVIEW_SCHEDULED
+  fromStage     String?
+  toStage       String?
+  note          String?
+  scheduledAt   DateTime?
+  actorType     String                            // HR|APPLICANT|SYSTEM
+  actorId       String?
+  createdAt     DateTime       @default(now())
+
+  application   JobApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@map("application_events")
 }

@@ -62,10 +62,11 @@ async function getAllSubordinateIds(supervisorId) {
 }
 
 /**
- * Resolve set of visible employee IDs for the requesting user.
+ * Resolve set of visible (or editable) employee IDs for the requesting user.
  * null = all employees.
+ * editableOnly = true → grant-added IDs limited to EDIT grants (VIEW grants are view-only).
  */
-async function resolveVisibleEmployeeIds(user) {
+async function resolveVisibleEmployeeIds(user, editableOnly = false) {
   const level = user.accessLevel ?? 5;
   if (level === 1) return null; // super admin sees all
 
@@ -119,7 +120,10 @@ async function resolveVisibleEmployeeIds(user) {
 
   // ── AttendanceViewPermission grants (any level) ───────────────────────────
   const grants = await prisma.attendanceViewPermission.findMany({
-    where: { userId: user.id },
+    where: {
+      userId: user.id,
+      ...(editableOnly ? { accessType: "EDIT" } : {}),
+    },
   });
   for (const grant of grants) {
     let extraEntityIds = [];
@@ -378,8 +382,8 @@ export const setWorkStatus = async (req, res) => {
     }
 
     if (requestingUser.id !== employeeId) {
-      const visibleIds = await resolveVisibleEmployeeIds(requestingUser);
-      if (visibleIds !== null && !visibleIds.includes(employeeId))
+      const editableIds = await resolveVisibleEmployeeIds(requestingUser, true);
+      if (editableIds !== null && !editableIds.includes(employeeId))
         return res.status(403).json({ success: false, message: "Forbidden" });
     }
 
@@ -415,8 +419,8 @@ export const deleteWorkStatus = async (req, res) => {
       return res.status(403).json({ success: false, message: "Cannot delete past dates" });
 
     if (requestingUser.id !== record.employeeId) {
-      const visibleIds = await resolveVisibleEmployeeIds(requestingUser);
-      if (visibleIds !== null && !visibleIds.includes(record.employeeId))
+      const editableIds = await resolveVisibleEmployeeIds(requestingUser, true);
+      if (editableIds !== null && !editableIds.includes(record.employeeId))
         return res.status(403).json({ success: false, message: "Forbidden" });
     }
 
@@ -538,17 +542,20 @@ export const grantAttendancePermission = async (req, res) => {
     if ((requestingUser?.accessLevel ?? 5) !== 1)
       return res.status(403).json({ success: false, message: "L1 admin only" });
 
-    const { userId, scopeType, scopeId } = req.body;
+    const { userId, scopeType, scopeId, accessType = "VIEW" } = req.body;
     if (!userId || !scopeType || !scopeId)
       return res.status(400).json({ success: false, message: "userId, scopeType, scopeId required" });
 
     if (!["ENTITY", "SUBGROUP", "GROUP"].includes(scopeType))
       return res.status(400).json({ success: false, message: "Invalid scopeType" });
 
+    if (!["VIEW", "EDIT"].includes(accessType))
+      return res.status(400).json({ success: false, message: "accessType must be VIEW or EDIT" });
+
     const permission = await prisma.attendanceViewPermission.upsert({
       where: { userId_scopeType_scopeId: { userId, scopeType, scopeId } },
-      create: { userId, scopeType, scopeId, grantedBy: req.user.id },
-      update: { grantedBy: req.user.id },
+      create: { userId, scopeType, scopeId, accessType, grantedBy: req.user.id },
+      update: { accessType, grantedBy: req.user.id },
       include: {
         user: { select: { id: true, name: true, email: true } },
         granter: { select: { id: true, name: true } },
@@ -593,12 +600,14 @@ export const searchUsersForPermission = async (req, res) => {
   }
 };
 
-// ─── Indonesian Public Holidays (proxy to Nager.Date API) ────────────────────
+// ─── Indonesian Public Holidays ───────────────────────────────────────────────
 
 /**
  * GET /api/work-status/holidays?year=2026
  * Returns Indonesian public holidays for the given year.
- * Results are cached in-memory for 24 hours.
+ * Source: api-harilibur.vercel.app (covers Islamic + national holidays).
+ * Fallback: Nager.Date (international-only, no Islamic holidays).
+ * Results cached in-memory for 24 hours.
  */
 export const getIndonesianHolidays = async (req, res) => {
   try {
@@ -608,15 +617,35 @@ export const getIndonesianHolidays = async (req, res) => {
     if (cached && cached.expiry > now) {
       return res.json({ success: true, data: cached.data });
     }
-    const resp = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/ID`);
-    if (!resp.ok) throw new Error(`Nager.Date API HTTP ${resp.status}`);
-    const raw = await resp.json();
-    const data = raw.map((h) => ({ date: h.date, name: h.name, localName: h.localName }));
+
+    let data = [];
+
+    // Source: libur.deno.dev — Indonesia-specific, includes Islamic + national holidays
+    // Response: [{ date: "YYYY-MM-DD", name: "...", is_national_holiday: bool }]
+    try {
+      const resp = await fetch(`https://libur.deno.dev/api?year=${year}`, {
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!resp.ok) throw new Error(`libur.deno.dev HTTP ${resp.status}`);
+      const raw = await resp.json();
+      if (Array.isArray(raw) && raw.length > 0) {
+        data = raw
+          .filter((h) => h.is_national_holiday === true)
+          .map((h) => ({
+            date: h.date,
+            name: h.name,
+            localName: h.name,
+          }));
+      }
+    } catch (err) {
+      console.error("[Holidays] libur.deno.dev failed:", err.message);
+      return res.json({ success: true, data: [], warning: "Holiday API unavailable" });
+    }
+
     _holidayCache.set(String(year), { data, expiry: now + 24 * 60 * 60 * 1000 });
     return res.json({ success: true, data });
   } catch (err) {
     console.error("[Holidays]", err.message);
-    // Return empty list on failure so frontend still works
     return res.json({ success: true, data: [], warning: err.message });
   }
 };

@@ -10,12 +10,17 @@ import {
   searchUsersForPermission,
 } from "../api/client";
 import apiClient from "../api/client";
-import { Plus, Trash2, Search, Shield, Building2, Users } from "lucide-react";
+import { Plus, Trash2, Search, Shield, Building2, Users, Eye, Edit3 } from "lucide-react";
 
 const SCOPE_LABELS = {
   ENTITY: { label: "Entity", icon: Building2, color: "bg-blue-100 text-blue-700" },
   SUBGROUP: { label: "Subgroup", icon: Users, color: "bg-indigo-100 text-indigo-700" },
   GROUP: { label: "Group", icon: Shield, color: "bg-purple-100 text-purple-700" },
+};
+
+const ACCESS_TYPES = {
+  VIEW: { label: "View Only", icon: Eye,   color: "bg-gray-100 text-gray-600 border-gray-200",   activeColor: "bg-gray-600 text-white border-gray-600" },
+  EDIT: { label: "Can Edit",  icon: Edit3, color: "bg-amber-50 text-amber-700 border-amber-200", activeColor: "bg-amber-500 text-white border-amber-500" },
 };
 
 export default function AttendancePermissions() {
@@ -30,6 +35,7 @@ export default function AttendancePermissions() {
   const [formScopeType, setFormScopeType] = useState("ENTITY");
   const [formScopeId, setFormScopeId] = useState("");
   const [formScopeName, setFormScopeName] = useState("");
+  const [formAccessType, setFormAccessType] = useState("VIEW");
   const [userSearch, setUserSearch] = useState("");
   const [userResults, setUserResults] = useState([]);
   const [scopeOptions, setScopeOptions] = useState([]);
@@ -98,12 +104,14 @@ export default function AttendancePermissions() {
         userId: formUser.id,
         scopeType: formScopeType,
         scopeId: formScopeId,
+        accessType: formAccessType,
       });
       setShowForm(false);
       setFormUser(null);
       setUserSearch("");
       setFormScopeId("");
       setFormScopeName("");
+      setFormAccessType("VIEW");
       await fetchPermissions();
     } catch (err) {
       alert(err.response?.data?.message || "Failed to grant permission");
@@ -140,9 +148,9 @@ export default function AttendancePermissions() {
         {/* Header */}
         <div className="flex items-start justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Attendance View Permissions</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Attendance Permissions</h1>
             <p className="text-sm text-gray-500 mt-1">
-              Grant specific accounts read access to work status schedules for an entity, subgroup, or group.
+              Grant accounts view-only or edit access to work status schedules for an entity, subgroup, or group.
             </p>
           </div>
           <button
@@ -157,7 +165,7 @@ export default function AttendancePermissions() {
         {/* Grant form */}
         {showForm && (
           <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6 shadow-sm">
-            <h2 className="text-base font-semibold text-gray-800 mb-4">Grant Attendance View Access</h2>
+            <h2 className="text-base font-semibold text-gray-800 mb-4">Grant Attendance Access</h2>
             <form onSubmit={handleGrant} className="space-y-4">
               {/* User search */}
               <div>
@@ -235,6 +243,35 @@ export default function AttendancePermissions() {
                     );
                   })}
                 </div>
+              </div>
+
+              {/* Access type */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Access level</label>
+                <div className="flex gap-2">
+                  {Object.entries(ACCESS_TYPES).map(([key, cfg]) => {
+                    const Icon = cfg.icon;
+                    const isActive = formAccessType === key;
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setFormAccessType(key)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                          isActive ? cfg.activeColor : "text-gray-600 border-gray-200 hover:bg-gray-50"
+                        }`}
+                      >
+                        <Icon size={14} />
+                        {cfg.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-gray-400 mt-1.5">
+                  {formAccessType === "VIEW"
+                    ? "Can view attendance status only — cannot make changes."
+                    : "Can view and update attendance status for employees in this scope."}
+                </p>
               </div>
 
               {/* Scope selection */}
@@ -321,6 +358,18 @@ export default function AttendancePermissions() {
                       <div className="text-sm font-medium text-gray-900">{perm.user?.name}</div>
                       <div className="text-xs text-gray-500">{perm.user?.email}</div>
                     </div>
+
+                    {/* Access type badge */}
+                    {(() => {
+                      const at = ACCESS_TYPES[perm.accessType] || ACCESS_TYPES.VIEW;
+                      const AtIcon = at.icon;
+                      return (
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${at.color}`}>
+                          <AtIcon size={10} />
+                          {at.label}
+                        </span>
+                      );
+                    })()}
 
                     {/* Scope */}
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${scopeCfg.color}`}>
