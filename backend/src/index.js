@@ -25,6 +25,7 @@ import entitySubgroupRoutes from "./routes/entitySubgroup.routes.js";
 
 import leaveReminderTestRoutes from "./routes/leaveReminderTest.routes.js";
 import workStatusRoutes from "./routes/workStatus.routes.js";
+import wfhRoutes from "./routes/wfh.routes.js";
 
 // Recruitment module routes
 import applicantAuthRoutes from "./routes/applicantAuth.routes.js";
@@ -182,6 +183,7 @@ app.use("/api/entity-subgroups", entitySubgroupRoutes);
 app.use("/api/policy-templates", policyTemplateRoutes);
 
 app.use("/api/work-status", workStatusRoutes);
+app.use("/api/wfh", wfhRoutes);
 
 // ── Recruitment module ────────────────────────────────────────────────────────
 // Candidate auth + public job board (no HR auth). Applying requires applicant token.

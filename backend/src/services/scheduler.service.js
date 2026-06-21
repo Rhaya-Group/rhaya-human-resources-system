@@ -2,6 +2,7 @@
 import cron from "node-cron";
 import leaveReminderService from "./leaveReminder.service.js";
 import { moveExpiredPlansToActualization } from "../controllers/overtime.controller.js";
+import { syncTodayWfhStatuses } from "../controllers/wfh.controller.js";
 
 const TZ = "Asia/Jakarta";
 
@@ -53,6 +54,16 @@ export function initializeScheduler() {
     "0 6 * * *",
     "Move expired overtime plans to PENDING_ACTUALIZATION",
     () => moveExpiredPlansToActualization(),
+  );
+
+  // ── 3. WFH status sync ───────────────────────────────────────────────────
+  // Runs daily at 00:01 AM WIB — writes WorkStatus WFH record for employees
+  // whose WFH schedule falls on today.
+  register(
+    "wfh-status-sync",
+    "1 0 * * 1-5",  // Mon-Fri only at 00:01 WIB
+    "Sync WFH schedules → WorkStatus records for today",
+    () => syncTodayWfhStatuses(),
   );
 
   console.log(`[Scheduler] Active jobs: ${scheduledJobs.length}`);

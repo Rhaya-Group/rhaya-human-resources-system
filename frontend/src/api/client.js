@@ -429,3 +429,88 @@ export const getHolidays = async (year) => {
   const response = await apiClient.get("/work-status/holidays", { params: { year } });
   return response.data;
 };
+
+// ============================================
+// WFH SCHEDULING FUNCTIONS
+// ============================================
+
+export const getWfhScopes = async () => {
+  const response = await apiClient.get("/wfh/scope");
+  return response.data;
+};
+
+export const addWfhScope = async (body) => {
+  const response = await apiClient.post("/wfh/scope", body);
+  return response.data;
+};
+
+export const updateWfhScope = async (id, body) => {
+  const response = await apiClient.patch(`/wfh/scope/${id}`, body);
+  return response.data;
+};
+
+export const deleteWfhScope = async (id) => {
+  const response = await apiClient.delete(`/wfh/scope/${id}`);
+  return response.data;
+};
+
+export const getWfhQuotas = async () => {
+  const response = await apiClient.get("/wfh/quota");
+  return response.data;
+};
+
+export const setWfhQuota = async (body) => {
+  const response = await apiClient.post("/wfh/quota", body);
+  return response.data;
+};
+
+export const deleteWfhQuota = async (employeeId) => {
+  const response = await apiClient.delete(`/wfh/quota/${employeeId}`);
+  return response.data;
+};
+
+export const getWfhSchedule = async (weekStartDate) => {
+  const params = weekStartDate ? { weekStartDate } : {};
+  const response = await apiClient.get("/wfh/schedule", { params });
+  return response.data;
+};
+
+export const submitWfhSchedule = async (body) => {
+  const response = await apiClient.post("/wfh/schedule", body);
+  return response.data;
+};
+
+export const deleteWfhSchedule = async (id) => {
+  const response = await apiClient.delete(`/wfh/schedule/${id}`);
+  return response.data;
+};
+
+export const getWfhEligibleEmployees = async () => {
+  const response = await apiClient.get("/wfh/admin/employees");
+  return response.data;
+};
+
+export const checkWfhScope = async () => {
+  const response = await apiClient.get("/wfh/check-scope");
+  return response.data;
+};
+
+export const getWfhWindowOverride = async () => {
+  const response = await apiClient.get("/wfh/admin/window-override");
+  return response.data;
+};
+
+export const setWfhWindowOverride = async (body) => {
+  const response = await apiClient.post("/wfh/admin/window-override", body);
+  return response.data;
+};
+
+export const addWfhExclusion = async (employeeId, reason) => {
+  const response = await apiClient.post("/wfh/admin/excluded", { employeeId, reason });
+  return response.data;
+};
+
+export const removeWfhExclusion = async (employeeId) => {
+  const response = await apiClient.delete(`/wfh/admin/excluded/${employeeId}`);
+  return response.data;
+};

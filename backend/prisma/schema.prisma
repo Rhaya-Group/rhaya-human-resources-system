@@ -83,6 +83,13 @@ model User {
   attendanceViewPermissions                             AttendanceViewPermission[] @relation("AttendanceViewPermissions")
   attendancePermissionsGranted                          AttendanceViewPermission[] @relation("AttendancePermissionsGranted")
   jobPostingsCreated                                    JobPosting[]               @relation("JobPostingCreator")
+  wfhQuota                                              WfhQuota?                  @relation("WfhQuota")
+  wfhQuotasSet                                          WfhQuota[]                 @relation("WfhQuotaSetter")
+  wfhSchedules                                          WfhSchedule[]              @relation("WfhScheduleEmployee")
+  wfhScheduleOverrides                                  WfhSchedule[]              @relation("WfhScheduleOverrider")
+  wfhWindowOverridesOpened                              WfhWindowOverride[]        @relation("WfhWindowOverrideOpener")
+  wfhExclusion                                          WfhExcludedEmployee?       @relation("WfhExcluded")
+  wfhExclusionsSet                                      WfhExcludedEmployee[]      @relation("WfhExcluder")
 
   @@index([email])
   @@index([username])
@@ -756,6 +763,83 @@ model WorkStatusDefault {
   setter     User     @relation("WorkStatusDefaultSetter", fields: [setBy],      references: [id])
 
   @@map("work_status_defaults")
+}
+
+// ─── WFH Scheduling ───────────────────────────────────────────────────────────
+// Configurable per entity/subgroup/group. Employees pick their WFH day each week
+// during the Sat-Sun submission window. Division cap enforced (max 1 per division
+// per day, or ceil(members/workingDays) when division is large).
+
+model WfhFeatureScope {
+  id        String   @id @default(cuid())
+  scopeType String   // ENTITY | SUBGROUP | GROUP
+  scopeId   String
+  isActive  Boolean  @default(true)
+  createdBy String
+  createdAt DateTime @default(now())
+
+  @@unique([scopeType, scopeId])
+  @@map("wfh_feature_scopes")
+}
+
+model WfhQuota {
+  id           String   @id @default(cuid())
+  employeeId   String   @unique
+  quotaPerWeek Int      @default(1)
+  setBy        String
+  updatedAt    DateTime @updatedAt
+
+  employee User @relation("WfhQuota",       fields: [employeeId], references: [id])
+  setter   User @relation("WfhQuotaSetter", fields: [setBy],      references: [id])
+
+  @@map("wfh_quotas")
+}
+
+model WfhSchedule {
+  id            String   @id @default(cuid())
+  employeeId    String
+  weekStartDate DateTime // Monday 00:00 UTC of target week
+  wfhDate       DateTime // Specific WFH day (Mon-Fri, non-holiday)
+  status        String   @default("PENDING") // PENDING | CONFIRMED | ADMIN_OVERRIDE
+  overriddenBy  String?
+  submittedAt   DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  employee  User  @relation("WfhScheduleEmployee",  fields: [employeeId],   references: [id])
+  overrider User? @relation("WfhScheduleOverrider", fields: [overriddenBy], references: [id])
+
+  @@unique([employeeId, wfhDate])      // one slot per calendar date per employee
+  @@index([weekStartDate])
+  @@index([employeeId])
+  @@map("wfh_schedules")
+}
+
+// Admin can force-open the WFH submission window outside of the regular Sat-Sun schedule.
+// Singleton record (id="global"). expiresAt optional — null means open until admin closes.
+model WfhWindowOverride {
+  id        String    @id @default("global")
+  isActive  Boolean   @default(false)
+  openedBy  String?
+  openedAt  DateTime?
+  expiresAt DateTime? // auto-close after this time; null = no expiry
+  note      String?   // reason / context for the override
+
+  opener User? @relation("WfhWindowOverrideOpener", fields: [openedBy], references: [id])
+
+  @@map("wfh_window_overrides")
+}
+
+model WfhExcludedEmployee {
+  id         String   @id @default(cuid())
+  employeeId String   @unique
+  excludedBy String?
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  employee User  @relation("WfhExcluded", fields: [employeeId], references: [id], onDelete: Cascade)
+  excluder User? @relation("WfhExcluder", fields: [excludedBy], references: [id])
+
+  @@map("wfh_excluded_employees")
 }
 
 // ─── Recruitment ───────────────────────────────────────────────────────────────

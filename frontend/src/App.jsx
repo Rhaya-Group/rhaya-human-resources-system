@@ -35,6 +35,8 @@ import PolicyTemplateManagement from "./pages/PolicyTemplateManagement";
 import EntitySubgroupManagement from "./pages/EntitySubgroupManagement";
 import WorkStatusDashboard from "./pages/WorkStatusDashboard";
 import AttendancePermissions from "./pages/AttendancePermissions";
+import WfhScheduler from "./pages/WfhScheduler";
+import WfhAdmin from "./pages/WfhAdmin";
 
 // Layout
 import Layout from "./components/Layout";
@@ -321,6 +323,24 @@ function App() {
             element={
               <ProtectedRoute allowedLevels={[1]}>
                 <AttendancePermissions />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/wfh"
+            element={
+              <ProtectedRoute>
+                <WfhScheduler />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/wfh/admin"
+            element={
+              <ProtectedRoute allowedLevels={[1, 2]}>
+                <WfhAdmin />
               </ProtectedRoute>
             }
           />

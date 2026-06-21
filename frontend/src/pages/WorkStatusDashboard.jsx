@@ -13,6 +13,7 @@ import {
   deleteWorkStatusDefault,
   getMyCalendarStatuses,
   getHolidays,
+  checkWfhScope,
 } from "../api/client";
 import {
   Building2, Monitor, MapPin, CalendarOff, PowerOff,
@@ -223,7 +224,7 @@ function StatusBadge({ status, size = "sm" }) {
   );
 }
 
-function StatusPicker({ currentStatus, onSelect, onCancel, canReset }) {
+function StatusPicker({ currentStatus, onSelect, onCancel, canReset, disableWfh = false }) {
   const ref = useRef(null);
 
   useEffect(() => {
@@ -240,12 +241,20 @@ function StatusPicker({ currentStatus, onSelect, onCancel, canReset }) {
         const cfg = STATUS_CONFIG[key];
         const Icon = cfg.icon;
         const isActive = currentStatus === key;
+        const isDisabled = key === "WFH" && disableWfh;
         return (
-          <button key={key} onMouseDown={(e) => { e.stopPropagation(); onSelect(key); }}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left ${isActive ? "bg-gray-100 ring-1 ring-gray-300" : "hover:bg-gray-50"}`}>
+          <button key={key}
+            onMouseDown={(e) => { e.stopPropagation(); if (!isDisabled) onSelect(key); }}
+            disabled={isDisabled}
+            title={isDisabled ? "WFH day is managed via WFH Scheduler" : undefined}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left ${
+              isDisabled ? "opacity-40 cursor-not-allowed" :
+              isActive ? "bg-gray-100 ring-1 ring-gray-300" : "hover:bg-gray-50"
+            }`}>
             <Icon size={14} className={cfg.iconColor} />
             {cfg.fullLabel}
             {isActive && <Check size={12} className="ml-auto text-gray-500" />}
+            {isDisabled && <span className="ml-auto text-xs text-gray-400">via WFH Scheduler</span>}
           </button>
         );
       })}
@@ -392,7 +401,7 @@ function DefaultStatusCard({ user, employeeId, defaultRec, onDefaultChange }) {
       )}
       {editing && (
         <div className="absolute right-0 top-full mt-1 z-50">
-          <StatusPicker currentStatus={status} onSelect={handleSelect} onCancel={() => setEditing(false)} canReset={!!defaultRec} />
+          <StatusPicker currentStatus={status} onSelect={handleSelect} onCancel={() => setEditing(false)} canReset={!!defaultRec} disableWfh={disableWfh && emp?.id === user?.id} />
         </div>
       )}
       {noteModal && <NoteModal onSubmit={handleNoteSubmit} onCancel={() => setNoteModal(false)} />}
@@ -442,7 +451,7 @@ function SummaryBar({ summary, bodSummary, dateLabel }) {
 
 // ─── Employee Row (today view) ────────────────────────────────────────────────
 
-function EmployeeRow({ emp, user, dateStr, record, defaultRec, onStatusChange, saving, isBod, holidays, onDefaultChange }) {
+function EmployeeRow({ emp, user, dateStr, record, defaultRec, onStatusChange, saving, isBod, holidays, onDefaultChange, disableWfh = false }) {
   const [editing, setEditing] = useState(false);
   const [noteModal, setNoteModal] = useState(false);
 
@@ -520,7 +529,7 @@ function EmployeeRow({ emp, user, dateStr, record, defaultRec, onStatusChange, s
 // ─── Today / Date View ────────────────────────────────────────────────────────
 
 function TodayView({ user, employees, statusMap, defaultMap, dateStr, onStatusChange, saving,
-                     summary, bodSummary, page, totalPages, onPageChange, holidays, onDefaultChange }) {
+                     summary, bodSummary, page, totalPages, onPageChange, holidays, onDefaultChange, disableWfh = false }) {
   const bod     = employees.filter(e => e.role?.name === BOD_ROLE);
   const regular = employees.filter(e => e.role?.name !== BOD_ROLE);
   const d = new Date(dateStr+"T00:00:00");
@@ -541,7 +550,7 @@ function TodayView({ user, employees, statusMap, defaultMap, dateStr, onStatusCh
                 <EmployeeRow key={emp.id} emp={emp} user={user}
                   dateStr={dateStr} record={statusMap[`${emp.id}::${dateStr}`]}
                   defaultRec={defaultMap[emp.id]} onStatusChange={onStatusChange}
-                  saving={saving} isBod holidays={holidays} onDefaultChange={onDefaultChange} />
+                  saving={saving} isBod holidays={holidays} onDefaultChange={onDefaultChange} disableWfh={disableWfh} />
               ))}
             </div>
           </>
@@ -551,7 +560,7 @@ function TodayView({ user, employees, statusMap, defaultMap, dateStr, onStatusCh
             <EmployeeRow key={emp.id} emp={emp} user={user}
               dateStr={dateStr} record={statusMap[`${emp.id}::${dateStr}`]}
               defaultRec={defaultMap[emp.id]} onStatusChange={onStatusChange}
-              saving={saving} isBod={false} holidays={holidays} onDefaultChange={onDefaultChange} />
+              saving={saving} isBod={false} holidays={holidays} onDefaultChange={onDefaultChange} disableWfh={disableWfh} />
           ))}
         </div>
         {employees.length === 0 && (
@@ -583,7 +592,7 @@ function PaginationBar({ page, totalPages, onPageChange }) {
 
 // ─── Week View ─────────────────────────────────────────────────────────────────
 
-function WeekView({ user, employees, statusMap, defaultMap, weekDates, onStatusChange, saving,
+function WeekView({ user, employees, statusMap, defaultMap, weekDates, onStatusChange, saving, disableWfh = false,
                     page, totalPages, onPageChange, holidays, weekDaySummary, onDefaultChange }) {
   const today = formatDate(new Date());
   const [editing, setEditing]       = useState(null); // { empId, dateStr }
@@ -813,7 +822,8 @@ function WeekView({ user, employees, statusMap, defaultMap, weekDates, onStatusC
       {editing && editingEff !== null && createPortal(
         <div style={pickerStyle}>
           <StatusPicker currentStatus={editingEff} onSelect={handleSelect}
-            onCancel={() => setEditing(null)} canReset={!!editingRec} />
+            onCancel={() => setEditing(null)} canReset={!!editingRec}
+            disableWfh={disableWfh && editing?.empId === user?.id} />
         </div>,
         document.body
       )}
@@ -830,7 +840,7 @@ function WeekView({ user, employees, statusMap, defaultMap, weekDates, onStatusC
 
 // ─── My Calendar View ─────────────────────────────────────────────────────────
 
-function MyCalendarView({ user, holidays }) {
+function MyCalendarView({ user, holidays, disableWfh = false }) {
   const today = new Date();
   const [monthOffset, setMonthOffset] = useState(0);
   const [calStatusMap, setCalStatusMap] = useState({});
@@ -995,7 +1005,8 @@ function MyCalendarView({ user, holidays }) {
             currentStatus={effectiveStatus(calStatusMap[editing], defaultRec, editing, holidays)}
             canReset={!!calStatusMap[editing]}
             onSelect={(s) => handleSelect(s, editing)}
-            onCancel={() => setEditing(null)} />
+            onCancel={() => setEditing(null)}
+            disableWfh={disableWfh} />
         </div>,
         document.body
       )}
@@ -1059,6 +1070,9 @@ export default function WorkStatusDashboard() {
   // Indonesian holidays: dateStr → localName
   const [holidays, setHolidays] = useState({});
 
+  // WFH scope: is current user in a WFH-scheduled entity?
+  const [userInWfhScope, setUserInWfhScope] = useState(false);
+
   // Fetch holidays once on mount (current + next year)
   useEffect(() => {
     const year = new Date().getFullYear();
@@ -1073,6 +1087,12 @@ export default function WorkStatusDashboard() {
       setHolidays(map);
     });
   }, []);
+
+  // Check if current user is in WFH scheduling scope (to disable WFH in status picker)
+  useEffect(() => {
+    if (!user) return;
+    checkWfhScope().then((res) => setUserInWfhScope(res.inScope)).catch(() => {});
+  }, [user]);
 
   const todayStr = useMemo(() => formatDate(new Date()), []);
   const [weekOffset, setWeekOffset] = useState(0);
@@ -1227,16 +1247,18 @@ export default function WorkStatusDashboard() {
           <TodayView user={user} employees={employees} statusMap={statusMap} defaultMap={defaultMap}
             dateStr={todayStr} onStatusChange={handleStatusChange} saving={saving}
             summary={summary} bodSummary={bodSummary} page={page} totalPages={totalPages}
-            onPageChange={handlePageChange} holidays={holidays} onDefaultChange={handleDefaultChange} />
+            onPageChange={handlePageChange} holidays={holidays} onDefaultChange={handleDefaultChange}
+            disableWfh={userInWfhScope && isAdmin === false} />
         )}
         {!loading && tab === "week" && (
           <WeekView user={user} employees={employees} statusMap={statusMap} defaultMap={defaultMap}
             weekDates={weekDates} onStatusChange={handleStatusChange} saving={saving}
             page={page} totalPages={totalPages} onPageChange={handlePageChange}
-            holidays={holidays} weekDaySummary={weekDaySummary} onDefaultChange={handleDefaultChange} />
+            holidays={holidays} weekDaySummary={weekDaySummary} onDefaultChange={handleDefaultChange}
+            disableWfh={userInWfhScope && isAdmin === false} />
         )}
         {tab === "calendar" && user && (
-          <MyCalendarView user={user} holidays={holidays} />
+          <MyCalendarView user={user} holidays={holidays} disableWfh={userInWfhScope && !isAdmin} />
         )}
       </div>
     </div>

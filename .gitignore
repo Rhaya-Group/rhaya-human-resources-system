@@ -59,3 +59,4 @@ coverage/
 .cache/
 temp/
 tmp/**/.env
+sendBulkWelcomeEmails.js

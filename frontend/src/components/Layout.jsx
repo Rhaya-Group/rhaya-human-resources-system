@@ -8,7 +8,7 @@ import { useTranslation } from "react-i18next";
 import apiClient from "../api/client";
 import LanguageToggle from "./LanguageToggle";
 import { useInternalPolicyUrl } from "../hooks/useInternalPolicyUrl";
-import { Shield } from "lucide-react";
+import { Shield, Monitor } from "lucide-react";
 
 // Icons
 const DashboardIcon = () => (
@@ -250,6 +250,8 @@ export default function Layout({ children }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isApprovalOpen, setIsApprovalOpen] = useState(false);
+  const [isAttendanceOpen, setIsAttendanceOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [hasSubordinates, setHasSubordinates] = useState(false);
 
   const handleLogout = () => {
@@ -413,28 +415,6 @@ export default function Layout({ children }) {
       });
     }
 
-    // ADMIN MENUS (Level 1 )
-    if (user?.accessLevel === 1) {
-      navItems.push({
-        path: "/settings/entity-groups",
-        label: "Entity Groups",
-        icon: BuildingIcon,
-        type: "link",
-      });
-      navItems.push({
-        path: "/settings/entity-subgroups",
-        label: "Entity sub-groups",
-        icon: BuildingIcon,
-        type: "link",
-      });
-      navItems.push({
-        path: "/settings/entity-policies",
-        label: "Entity Policies",
-        icon: Shield,
-        type: "link",
-      });
-    }
-
     // Only add Approval dropdown if there are children
     if (approvalChildren.length > 0) {
       navItems.push({
@@ -468,21 +448,57 @@ export default function Layout({ children }) {
     });
   }
 
-  // ATTENDANCE / WORK STATUS (All users)
-  navItems.push({
-    path: "/attendance",
-    label: "Work Status",
-    icon: AttendanceIcon,
-    type: "link",
-  });
+  // ATTENDANCE GROUP (Admin: dropdown; Employee: flat links)
+  if (user?.accessLevel <= 2) {
+    // Admin: Attendance dropdown — Work Status + WFH Management + (L1) Attendance Access
+    const attendanceChildren = [
+      { path: "/attendance", label: "Work Status" },
+      { path: "/wfh/admin",  label: "WFH Management" },
+    ];
+    if (user?.accessLevel === 1) {
+      attendanceChildren.push({ path: "/attendance/permissions", label: "Attendance Access" });
+    }
+    navItems.push({
+      label: "Attendance",
+      icon: AttendanceIcon,
+      type: "dropdown",
+      isOpen: isAttendanceOpen,
+      toggle: () => setIsAttendanceOpen(!isAttendanceOpen),
+      children: attendanceChildren,
+    });
+  } else {
+    // Employee: flat Work Status link
+    navItems.push({
+      path: "/attendance",
+      label: "Work Status",
+      icon: AttendanceIcon,
+      type: "link",
+    });
+  }
 
-  // ATTENDANCE PERMISSIONS (Level 1 only)
+  // WFH SCHEDULER — employee picker (non-admin only; page handles scope check)
+  if (user?.accessLevel > 2) {
+    navItems.push({
+      path: "/wfh",
+      label: "WFH Schedule",
+      icon: Monitor,
+      type: "link",
+    });
+  }
+
+  // SETTINGS (Level 1 only — entity config)
   if (user?.accessLevel === 1) {
     navItems.push({
-      path: "/attendance/permissions",
-      label: "Attendance Access",
+      label: "Settings",
       icon: Shield,
-      type: "link",
+      type: "dropdown",
+      isOpen: isSettingsOpen,
+      toggle: () => setIsSettingsOpen(!isSettingsOpen),
+      children: [
+        { path: "/settings/entity-groups",    label: "Entity Groups" },
+        { path: "/settings/entity-subgroups", label: "Entity Sub-groups" },
+        { path: "/settings/entity-policies",  label: "Entity Policies" },
+      ],
     });
   }
 
