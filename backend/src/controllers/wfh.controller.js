@@ -435,6 +435,18 @@ export const getSchedule = async (req, res) => {
         })
       : [];
 
+    // All eligible division members (including those who haven't filled WFH yet)
+    const divisionMembers = user.divisionId
+      ? await prisma.user.findMany({
+          where: {
+            divisionId: user.divisionId,
+            id: { in: [...scopedIds], not: user.id },
+          },
+          select: { id: true, name: true },
+          orderBy: { name: "asc" },
+        })
+      : [];
+
     const quota = await prisma.wfhQuota.findUnique({ where: { employeeId: user.id } });
     const quotaPerWeek = quota?.quotaPerWeek ?? 1;
 
@@ -455,6 +467,7 @@ export const getSchedule = async (req, res) => {
       data: {
         mySchedules,
         divisionSchedules,
+        divisionMembers,
         weekStartDate: toDateStr(weekStartDate),
         workingDays,
         holidays,
@@ -573,8 +586,10 @@ export const submitSchedule = async (req, res) => {
       include: { employee: { select: { id: true, name: true } } },
     });
 
-    // Auto-write WorkStatus WFH record for that day
-    await upsertWfhWorkStatus(empId, wfhDate, user.id);
+    // Auto-write WorkStatus WFH record for that day.
+    // submittedBy = null marks it as system-generated so deleteSchedule can clean it up.
+    // Admin overrides use user.id for audit trail.
+    await upsertWfhWorkStatus(empId, wfhDate, isAdmin ? user.id : null);
 
     return res.json({ success: true, data: schedule });
   } catch (err) {
