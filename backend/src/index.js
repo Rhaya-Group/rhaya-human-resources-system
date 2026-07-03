@@ -50,17 +50,30 @@ const PORT = process.env.PORT || 3000;
 // MIDDLEWARE
 // ============================================
 
-// CORS Configuration - Production Ready
-const allowedOrigins = [
+// CORS Configuration - env-driven per deploy (dev/staging/prod)
+const isProduction = process.env.NODE_ENV === "production";
+
+const devOrigins = [
   "http://localhost:5173", // Development (HR app)
   "http://localhost:5176", // Development (recruitment site)
   "http://localhost:3000", // Development
-  "https://polyphyodont-dannielle-semiadhesive.ngrok-free.dev", // Development
-  "https://rhaya-human-resources-system.pages.dev", // Production
-  process.env.FRONTEND_URL, // From Railway env var
-  process.env.RECRUITMENT_URL, // Recruitment site domain (set in prod env)
-  /\.pages\.dev$/, // All Cloudflare Pages subdomains
+  "https://polyphyodont-dannielle-semiadhesive.ngrok-free.dev", // Development tunnel
 ];
+
+// Extra origins per environment (e.g. staging URL), comma-separated in Railway env vars
+const extraOrigins = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+const allowedOrigins = [
+  ...(isProduction ? [] : devOrigins),
+  "https://rhaya-human-resources-system.pages.dev", // Production (legacy Pages domain)
+  process.env.FRONTEND_URL, // Primary frontend domain, set per Railway env
+  process.env.RECRUITMENT_URL, // Recruitment site domain, set per Railway env
+  ...extraOrigins,
+  /\.pages\.dev$/, // All Cloudflare Pages preview subdomains
+].filter(Boolean);
 
 app.set("trust proxy", 1);
 
