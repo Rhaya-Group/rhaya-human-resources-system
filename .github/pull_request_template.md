@@ -17,7 +17,7 @@
 ## DB changes
 
 - [ ] No schema changes
-- [ ] Schema changed → ran `npx prisma db push` + `npx prisma generate`
+- [ ] Schema changed → ran `npx prisma migrate dev --name describe_change` + committed migration file
 
 ## Testing
 
