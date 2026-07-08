@@ -98,16 +98,18 @@ Key groups:
 
 ## Database
 
-Schema managed via Prisma. This project uses **`db push`** (not migration files).
+Schema managed via Prisma migrations.
 
 ```bash
 cd backend
-npx prisma db push          # apply schema changes to DB
-npx prisma studio           # GUI to inspect data
-npx prisma generate         # regenerate client after schema edit
+npx prisma migrate dev --name your_change   # generate + apply migration locally (commit the file)
+npx prisma generate                          # regenerate client after schema edit
+npx prisma studio                            # GUI to inspect data
 ```
 
-> Do not run `prisma migrate dev` — the migrations folder is stale. Always use `db push`.
+**Prod/staging (Railway):** `prisma migrate deploy` runs automatically on every deploy — no manual action needed.
+
+> Do NOT use `db push` for real changes — prod tracks migration files. `db push` is only for quick throwaway local experiments.
 
 ---
 

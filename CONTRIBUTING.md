@@ -54,14 +54,18 @@ gh pr create --base main
 
 ## Database changes
 
-**Always use `db push`, not `prisma migrate dev`.**
+**Always use `prisma migrate dev` locally, never `db push`.**
 
 ```bash
 # After editing backend/prisma/schema.prisma:
 cd backend
-npx prisma db push
+npx prisma migrate dev --name describe_your_change
 npx prisma generate
+git add prisma/migrations          # commit the generated migration file
 ```
+
+Prod (Railway) applies migrations automatically via `prisma migrate deploy` on every deploy.
+Do NOT run `db push` — it bypasses migration tracking and will cause drift between environments.
 
 ---
 

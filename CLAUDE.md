@@ -12,7 +12,15 @@ Internal HRIS + standalone recruitment website. Two frontends, one shared Expres
 
 ## Critical rules
 
-**DB:** use `npx prisma db push` (NOT `prisma migrate dev` — migrations folder is stale).
+**DB — migration workflow (important):**
+- **Local dev:** `npx prisma migrate dev --name your_change` → generates a migration file in `prisma/migrations/`. Commit this file.
+- **Staging/prod (Railway):** `prisma migrate deploy` runs automatically on every deploy (see `backend/railway.json` startCommand). Never run `db push` in production.
+- Do NOT use `db push` anymore — prod now tracks migration files. All schema changes must go through `prisma migrate dev` locally first.
+
+**Environments:**
+- Dev: `NODE_ENV=development` — localhost origins included in CORS
+- Prod: `NODE_ENV=production` — localhost excluded, only `FRONTEND_URL`, `RECRUITMENT_URL`, `ALLOWED_ORIGINS` (comma-separated extra origins) allowed
+- Extra origins per env: set `ALLOWED_ORIGINS=https://staging.example.com` in Railway env vars — no code change needed
 
 **Auth — two separate token types, never mix:**
 - HR users → `User` table, JWT payload `{ userId }`, middleware `authenticate` + `authorizeHR`
@@ -25,7 +33,7 @@ Internal HRIS + standalone recruitment website. Two frontends, one shared Expres
 
 **Email:** SMTP2GO via `src/services/email.service.js`. Respect `smtpProfile` per entity.
 
-**No `prisma migrate dev`.** Schema changes go via `db push` only.
+**No `db push` in production.** Local schema changes: `prisma migrate dev`. Prod applies via `migrate deploy` on Railway deploy.
 
 ## Stack
 
