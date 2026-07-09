@@ -83,6 +83,8 @@ model User {
   attendanceViewPermissions                             AttendanceViewPermission[] @relation("AttendanceViewPermissions")
   attendancePermissionsGranted                          AttendanceViewPermission[] @relation("AttendancePermissionsGranted")
   jobPostingsCreated                                    JobPosting[]               @relation("JobPostingCreator")
+  recruitingPositions                                   JobPosting[]               @relation("JobPostingRecruiter")
+  positionOverseers                                     PositionOverseer[]
   wfhQuota                                              WfhQuota?                  @relation("WfhQuota")
   wfhQuotasSet                                          WfhQuota[]                 @relation("WfhQuotaSetter")
   wfhSchedules                                          WfhSchedule[]              @relation("WfhScheduleEmployee")
@@ -847,15 +849,19 @@ model WfhExcludedEmployee {
 // HR = existing User auth (entity-scoped). Candidates = separate Applicant table.
 
 model Applicant {
-  id           String           @id @default(cuid())
-  email        String           @unique
-  password     String                            // bcrypt (cost 10), same as auth.controller
-  name         String
-  phone        String?
-  resumeUrl    String?                           // optional default CV
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
-  applications JobApplication[]
+  id             String           @id @default(cuid())
+  email          String           @unique
+  password       String                            // bcrypt (cost 10), same as auth.controller
+  name           String
+  phone          String?
+  resumeUrl      String?                           // legacy; use cvFileUrl for R2 uploads
+  cvFileUrl      String?                           // R2 URL of uploaded CV file
+  parsedCv       Json?                             // structured CV — shape locked in RECRUITMENT_PLAN.md
+  emailVerified  Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  applications   JobApplication[]
+  profileAnswers ProfileAnswer[]
 
   @@map("applicants")
 }
@@ -867,20 +873,26 @@ model JobPosting {
   department        String?
   location          String?
   employmentType    String           @default("FULL_TIME") // FULL_TIME|CONTRACT|INTERN
-  status            String           @default("DRAFT")      // DRAFT|OPEN|CLOSED
+  status            String           @default("DRAFT")     // DRAFT|OPEN|CLOSED
   openings          Int              @default(1)
   closeDate         DateTime?
   plottingCompanyId String                       // entity scope anchor
-  createdById       String                       // HR User
+  createdById       String                       // HR User who created
+  recruiterId       String?                      // assigned recruiter (HR User)
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 
-  plottingCompany   PlottingCompany  @relation(fields: [plottingCompanyId], references: [id])
-  createdBy         User             @relation("JobPostingCreator", fields: [createdById], references: [id])
+  plottingCompany   PlottingCompany      @relation(fields: [plottingCompanyId], references: [id])
+  createdBy         User                 @relation("JobPostingCreator",   fields: [createdById],  references: [id])
+  recruiter         User?                @relation("JobPostingRecruiter",  fields: [recruiterId],  references: [id])
   applications      JobApplication[]
+  questions         PositionQuestion[]
+  overseers         PositionOverseer[]
+  documents         RecruitmentDocument[]
 
   @@index([plottingCompanyId])
   @@index([status])
+  @@index([recruiterId])
   @@map("job_postings")
 }
 
@@ -888,19 +900,24 @@ model JobApplication {
   id             String             @id @default(cuid())
   jobPostingId   String
   applicantId    String
-  stage          String             @default("APPLIED") // APPLIED|SCREENING|INTERVIEW|OFFER|HIRED|REJECTED
+  // 12-stage pipeline: applied→screening→case_study_1→interview→case_study_2→
+  //   final_interview→col_issued→background_check→offer→hired/rejected/withdrawn
+  stage          String             @default("applied")
   coverLetter    String?
   resumeUrl      String?                          // per-application CV override
   hrNotes        String?
   rejectedReason String?
+  knockoutFlagged Boolean           @default(false) // soft knockout flag for HR review
   appliedAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 
-  jobPosting     JobPosting         @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
-  applicant      Applicant          @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  jobPosting     JobPosting            @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+  applicant      Applicant             @relation(fields: [applicantId],  references: [id], onDelete: Cascade)
   events         ApplicationEvent[]
+  answers        Answer[]
+  documents      RecruitmentDocument[]
 
-  @@unique([jobPostingId, applicantId])           // one application per posting per candidate
+  @@unique([jobPostingId, applicantId])
   @@index([jobPostingId])
   @@index([applicantId])
   @@index([stage])
@@ -910,7 +927,7 @@ model JobApplication {
 model ApplicationEvent {                          // pipeline audit trail
   id            String         @id @default(cuid())
   applicationId String
-  type          String                            // STAGE_CHANGE|NOTE|INTERVIEW_SCHEDULED
+  type          String                            // STAGE_CHANGE|NOTE|INTERVIEW_SCHEDULED|DOCUMENT_ISSUED|DOCUMENT_RECEIVED
   fromStage     String?
   toStage       String?
   note          String?
@@ -923,4 +940,107 @@ model ApplicationEvent {                          // pipeline audit trail
 
   @@index([applicationId])
   @@map("application_events")
+}
+
+// ─── Recruitment v2 — Question bank + answers ─────────────────────────────────
+
+model Question {
+  id           String   @id @default(cuid())
+  text         String
+  type         String   // bool | single | multi | number | text
+  isKnockout   Boolean  @default(false)
+  knockoutRule Json?    // { operator: "equals"|"min"|"max"|"includes", value, soft: bool }
+  scope        String   @default("position") // position (per-application) | common (per-candidate, asked once)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  positionQuestions PositionQuestion[]
+  answers           Answer[]
+  profileAnswers    ProfileAnswer[]
+
+  @@index([scope])
+  @@map("questions")
+}
+
+model PositionQuestion {
+  id           String     @id @default(cuid())
+  jobPostingId String
+  questionId   String
+  order        Int        @default(0)
+
+  jobPosting   JobPosting @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+  question     Question   @relation(fields: [questionId],   references: [id], onDelete: Cascade)
+
+  @@unique([jobPostingId, questionId])
+  @@index([jobPostingId])
+  @@map("position_questions")
+}
+
+model Answer {
+  id            String         @id @default(cuid())
+  applicationId String
+  questionId    String
+  value         Json
+
+  application   JobApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  question      Question       @relation(fields: [questionId],    references: [id])
+
+  @@unique([applicationId, questionId])
+  @@index([applicationId])
+  @@map("answers")
+}
+
+model ProfileAnswer {
+  id          String    @id @default(cuid())
+  applicantId String
+  questionId  String
+  value       Json
+
+  applicant   Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  question    Question  @relation(fields: [questionId],  references: [id])
+
+  @@unique([applicantId, questionId])
+  @@index([applicantId])
+  @@map("profile_answers")
+}
+
+// ─── Recruitment v2 — Overseers + Documents ───────────────────────────────────
+
+model PositionOverseer {
+  id           String     @id @default(cuid())
+  jobPostingId String
+  hrisUserId   String
+  access       String     @default("view") // view | manage
+  addedBy      String
+  createdAt    DateTime   @default(now())
+
+  jobPosting   JobPosting @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+  hrisUser     User       @relation(fields: [hrisUserId],   references: [id])
+
+  @@unique([jobPostingId, hrisUserId])
+  @@index([jobPostingId])
+  @@index([hrisUserId])
+  @@map("position_overseers")
+}
+
+model RecruitmentDocument {
+  id            String          @id @default(cuid())
+  applicationId String?
+  jobPostingId  String?
+  stage         String?         // pipeline stage this doc is associated with
+  direction     String          // outbound (HR→candidate) | inbound (candidate→HR)
+  kind          String          // file (R2) | link (external URL)
+  title         String
+  fileUrl       String?
+  linkUrl       String?
+  uploadedBy    String?         // User.id for HR, null for candidate/system
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  application   JobApplication? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  jobPosting    JobPosting?     @relation(fields: [jobPostingId],  references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@index([jobPostingId])
+  @@map("recruitment_documents")
 }
