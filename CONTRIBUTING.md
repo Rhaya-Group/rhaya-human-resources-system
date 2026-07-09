@@ -14,9 +14,9 @@ Follow [README.md](README.md) local setup. Get `.env` values from the team lead.
 | Bug fix | `fix/<short-description>` | `fix/leave-balance-reset` |
 | Chore | `chore/<short-description>` | `chore/update-deps` |
 
-Always branch off `main`:
+Always branch off `development`:
 ```bash
-git checkout main && git pull origin main
+git checkout development && git pull origin development
 git checkout -b feat/your-feature
 ```
 
@@ -40,15 +40,19 @@ Subject line ≤ 50 chars. Body explains the *why*, not the *what*.
 
 ## Pull requests
 
-1. Push branch → open PR against `main`
-2. Fill in the PR template
-3. At least one review required before merge
-4. Delete branch after merge
+Workflow: `feat/* → development → main`
+
+- Day-to-day: PR feature branch → `development` (integration)
+- Release: PR `development` → `main` (triggers Railway deploy)
 
 ```bash
 git push origin feat/your-feature
-gh pr create --base main
+gh pr create --base development
 ```
+
+1. Fill in the PR template
+2. At least one review required before merge
+3. Delete branch after merge
 
 ---
 

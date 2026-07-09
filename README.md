@@ -63,7 +63,8 @@ npm run dev                  # starts on :5176, proxies /api → :3000
 ## Branch workflow
 
 ```
-main          → production (no direct push)
+main          → production (Railway auto-deploys on merge)
+development   → integration (merge PRs here first)
 feat/<name>   → new features
 fix/<name>    → bug fixes
 chore/<name>  → non-feature work (deps, docs, config)
@@ -71,14 +72,14 @@ chore/<name>  → non-feature work (deps, docs, config)
 
 **Steps:**
 ```bash
-git checkout main && git pull origin main
+git checkout development && git pull origin development
 git checkout -b feat/your-feature
 # ... work, commit ...
 git push origin feat/your-feature
-gh pr create --base main
+gh pr create --base development
 ```
 
-PRs require at least one review before merge. See [CONTRIBUTING.md](CONTRIBUTING.md).
+To release: PR `development → main`. PRs require at least one review. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
