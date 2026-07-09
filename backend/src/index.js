@@ -33,6 +33,10 @@ import publicJobRoutes from "./routes/publicJob.routes.js";
 import applicantPortalRoutes from "./routes/applicantPortal.routes.js";
 import jobPostingRoutes from "./routes/jobPosting.routes.js";
 import jobApplicationRoutes from "./routes/jobApplication.routes.js";
+import questionRoutes from "./routes/question.routes.js";
+import positionOverseerRoutes from "./routes/positionOverseer.routes.js";
+import recruitmentDocumentRoutes from "./routes/recruitmentDocument.routes.js";
+import cvUploadRoutes from "./routes/cvUpload.routes.js";
 
 // Import middleware
 import { authenticateToken, authenticate, authorizeHR } from "./middleware/auth.js";
@@ -207,6 +211,14 @@ app.use("/api/recruitment/my", applicantAuthenticate, applicantPortalRoutes);
 // HR-only, entity-scoped: postings CRUD + application pipeline (reuses existing User auth).
 app.use("/api/recruitment/jobs", authenticate, authorizeHR, jobPostingRoutes);
 app.use("/api/recruitment/applications", authenticate, authorizeHR, jobApplicationRoutes);
+// HR: question bank + position assignment
+app.use("/api/recruitment/questions", authenticate, authorizeHR, questionRoutes);
+// HR: position overseers
+app.use("/api/recruitment/postings", authenticate, authorizeHR, positionOverseerRoutes);
+// HR: document management
+app.use("/api/recruitment/documents", authenticate, authorizeHR, recruitmentDocumentRoutes);
+// Candidate: CV upload + document submission
+app.use("/api/recruitment/my/cv", applicantAuthenticate, cvUploadRoutes);
 
 // ============================================
 // ERROR HANDLING
