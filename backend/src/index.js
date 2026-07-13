@@ -17,6 +17,7 @@ import payslipRoutes from "./routes/payslip.routes.js";
 import welcomeEmailRoutes from "./routes/welcomeEmail.routes.js";
 import plottingCompanyRoutes from "./routes/plottingCompany.routes.js";
 import documentRoutes from "./routes/document.routes.js";
+import emergencyContactRoutes from "./routes/emergencyContact.routes.js";
 import internalRoutes from "./routes/internal.routes.js";
 import offboardingRoutes from "./routes/offboarding.routes.js";
 import entityGroupRoutes from "./routes/entityGroup.routes.js";
@@ -184,6 +185,7 @@ app.use("/api/overtime-recap", overtimeRecapRoutes);
 app.use("/api/payslips", payslipRoutes);
 app.use("/api/plotting-companies", plottingCompanyRoutes);
 app.use("/api/users/:userId/documents", documentRoutes);
+app.use("/api/users/:userId/emergency-contacts", emergencyContactRoutes);
 app.use("/api/admin/leave-reminder", leaveReminderTestRoutes);
 
 // Static file serving for uploads (protected)

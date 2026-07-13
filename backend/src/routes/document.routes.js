@@ -5,7 +5,7 @@ import {
   authorizeAdmin,
   requireRole,
 } from "../middleware/auth.js";
-import { uploadContract as multerUpload } from "../config/upload.js";
+import { uploadDocument as multerUpload } from "../config/upload.js";
 import {
   uploadDocument,
   getUserDocuments,
@@ -30,10 +30,11 @@ router.get("/:documentId", getDocumentById);
 // Download document (generates signed URL)
 router.get("/:documentId/download", downloadDocument);
 
-// Upload document (admin only)
+// Upload document — HR (any type/employee) or an employee self-uploading their
+// own personal-ID documents (KTP/NPWP/BPJS/SIM/KK). Access enforced in the
+// controller since it needs the parsed documentType from the multipart body.
 router.post(
   "/upload",
-  requireRole([1, 2]),
   multerUpload.single("file"),
   uploadDocument,
 );

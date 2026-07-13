@@ -43,6 +43,7 @@ model User {
   balanceAdjustments                                    BalanceAdjustmentLog[]
   EmployeeDocument_EmployeeDocument_uploadedByIdTousers EmployeeDocument[]     @relation("EmployeeDocument_uploadedByIdTousers")
   EmployeeDocument_EmployeeDocument_userIdTousers       EmployeeDocument[]     @relation("EmployeeDocument_userIdTousers")
+  emergencyContacts                                     EmergencyContact[]
   leaveBalances                                         LeaveBalance[]
   leaveApprovals                                        LeaveRequest[]         @relation("LeaveCurrentApprover")
   divisionHeadLeaves                                    LeaveRequest[]         @relation("LeaveDivisionHead")
@@ -633,6 +634,7 @@ model EmployeeDocument {
   fileSize                                   Int
   mimeType                                   String    @default("application/pdf")
   documentType                               String
+  documentNumber                             String?
   startDate                                  DateTime?
   endDate                                    DateTime?
   status                                     String    @default("active")
@@ -645,6 +647,21 @@ model EmployeeDocument {
   @@index([documentType])
   @@index([status])
   @@index([userId])
+}
+
+model EmergencyContact {
+  id           String   @id @default(cuid())
+  userId       String
+  name         String
+  relationship String
+  phone        String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("emergency_contacts")
 }
 
 model Offboarding {
