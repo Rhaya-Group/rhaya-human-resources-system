@@ -8,7 +8,7 @@ import { useTranslation } from "react-i18next";
 import apiClient from "../api/client";
 import LanguageToggle from "./LanguageToggle";
 import { useInternalPolicyUrl } from "../hooks/useInternalPolicyUrl";
-import { Shield, Monitor } from "lucide-react";
+import { Shield, Monitor, Briefcase } from "lucide-react";
 
 // Icons
 const DashboardIcon = () => (
@@ -252,6 +252,7 @@ export default function Layout({ children }) {
   const [isApprovalOpen, setIsApprovalOpen] = useState(false);
   const [isAttendanceOpen, setIsAttendanceOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isRecruitmentOpen, setIsRecruitmentOpen] = useState(false);
   const [hasSubordinates, setHasSubordinates] = useState(false);
 
   const handleLogout = () => {
@@ -483,6 +484,21 @@ export default function Layout({ children }) {
       label: "WFH Schedule",
       icon: Monitor,
       type: "link",
+    });
+  }
+
+  // RECRUITMENT (Level 1–2 — HR can manage question bank, pipeline, overseers)
+  if (user?.accessLevel <= 2) {
+    navItems.push({
+      label: "Recruitment",
+      icon: Briefcase,
+      type: "dropdown",
+      isOpen: isRecruitmentOpen,
+      toggle: () => setIsRecruitmentOpen(!isRecruitmentOpen),
+      children: [
+        { path: "/recruitment/jobs", label: "Job Postings" },
+        { path: "/recruitment/questions", label: "Question Bank" },
+      ],
     });
   }
 

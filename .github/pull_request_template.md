@@ -25,7 +25,7 @@
 
 ## Checklist
 
-- [ ] Branch off `main`, up to date with `main`
+- [ ] Branch off `development`, up to date with `development`
 - [ ] No `.env` values committed
 - [ ] HR routes use `authenticate` + `authorizeHR`
 - [ ] Candidate routes use `applicantAuthenticate`

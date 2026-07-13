@@ -38,6 +38,11 @@ import AttendancePermissions from "./pages/AttendancePermissions";
 import WfhScheduler from "./pages/WfhScheduler";
 import WfhAdmin from "./pages/WfhAdmin";
 
+// Recruitment
+import QuestionBank from "./pages/recruitment/QuestionBank";
+import JobPostings from "./pages/recruitment/JobPostings";
+import Pipeline from "./pages/recruitment/Pipeline";
+
 // Layout
 import Layout from "./components/Layout";
 
@@ -341,6 +346,32 @@ function App() {
             element={
               <ProtectedRoute allowedLevels={[1, 2]}>
                 <WfhAdmin />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Recruitment */}
+          <Route
+            path="/recruitment/questions"
+            element={
+              <ProtectedRoute allowedLevels={[1, 2]}>
+                <QuestionBank />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recruitment/jobs"
+            element={
+              <ProtectedRoute allowedLevels={[1, 2]}>
+                <JobPostings />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recruitment/jobs/:id/pipeline"
+            element={
+              <ProtectedRoute allowedLevels={[1, 2]}>
+                <Pipeline />
               </ProtectedRoute>
             }
           />
