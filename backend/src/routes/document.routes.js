@@ -5,7 +5,7 @@ import {
   authorizeAdmin,
   requireRole,
 } from "../middleware/auth.js";
-import { uploadContract as multerUpload } from "../config/upload.js";
+import { uploadDocument as multerUpload } from "../config/upload.js";
 import {
   uploadDocument,
   getUserDocuments,

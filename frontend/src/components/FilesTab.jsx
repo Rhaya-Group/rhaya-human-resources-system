@@ -8,8 +8,16 @@ const DOCUMENT_TYPES = [
   { value: 'Internship', label: 'Internship Agreement' },
   { value: 'Amendment', label: 'Contract Amendment' },
   { value: 'LoA', label: 'Letter of Appointment' },
+  { value: 'KTP', label: 'KTP (National ID)' },
+  { value: 'NPWP', label: 'NPWP (Tax ID)' },
+  { value: 'BPJS_Kesehatan', label: 'BPJS Kesehatan' },
+  { value: 'BPJS_TK', label: 'BPJS Ketenagakerjaan' },
+  { value: 'SIM', label: 'SIM (Driving License)' },
+  { value: 'KK', label: 'KK (Family Card)' },
   // Note: Payslip NOT in upload options - use Payslip Management
 ];
+
+const ALLOWED_FILE_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
 
 export default function FilesTab({ userId, isAdmin }) {
   const [documents, setDocuments] = useState([]);
@@ -59,14 +67,14 @@ export default function FilesTab({ userId, isAdmin }) {
 
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
-    if (file && file.type === 'application/pdf') {
+    if (file && ALLOWED_FILE_TYPES.includes(file.type)) {
       if (file.size > 10 * 1024 * 1024) {
         alert('File size must be less than 10MB');
         return;
       }
       setUploadData({...uploadData, file});
     } else {
-      alert('Only PDF files are allowed');
+      alert('Only PDF, JPG, or PNG files are allowed');
       e.target.value = '';
     }
   };
@@ -173,7 +181,13 @@ export default function FilesTab({ userId, isAdmin }) {
       Internship: 'bg-purple-100 text-purple-800',
       Amendment: 'bg-yellow-100 text-yellow-800',
       LoA: 'bg-indigo-100 text-indigo-800',
-      Payslip: 'bg-pink-100 text-pink-800'
+      Payslip: 'bg-pink-100 text-pink-800',
+      KTP: 'bg-orange-100 text-orange-800',
+      NPWP: 'bg-teal-100 text-teal-800',
+      BPJS_Kesehatan: 'bg-cyan-100 text-cyan-800',
+      BPJS_TK: 'bg-sky-100 text-sky-800',
+      SIM: 'bg-amber-100 text-amber-800',
+      KK: 'bg-lime-100 text-lime-800'
     };
     return colors[type] || 'bg-gray-100 text-gray-800';
   };
@@ -340,16 +354,16 @@ export default function FilesTab({ userId, isAdmin }) {
             <form onSubmit={handleUpload} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  PDF File <span className="text-red-500">*</span>
+                  File <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="file"
-                  accept="application/pdf"
+                  accept="application/pdf,image/jpeg,image/png,image/jpg"
                   onChange={handleFileSelect}
                   required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 />
-                <p className="text-xs text-gray-500 mt-1">Max 10MB, PDF only</p>
+                <p className="text-xs text-gray-500 mt-1">Max 10MB, PDF/JPG/PNG</p>
               </div>
 
               <div>

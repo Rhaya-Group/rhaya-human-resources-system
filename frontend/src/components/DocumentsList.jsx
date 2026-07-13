@@ -44,7 +44,13 @@ export default function DocumentsList({ userId, excludeTypes = ['Payslip'] }) {
       PKWTT: 'bg-green-100 text-green-800',
       Internship: 'bg-purple-100 text-purple-800',
       Amendment: 'bg-yellow-100 text-yellow-800',
-      LoA: 'bg-indigo-100 text-indigo-800'
+      LoA: 'bg-indigo-100 text-indigo-800',
+      KTP: 'bg-orange-100 text-orange-800',
+      NPWP: 'bg-teal-100 text-teal-800',
+      BPJS_Kesehatan: 'bg-cyan-100 text-cyan-800',
+      BPJS_TK: 'bg-sky-100 text-sky-800',
+      SIM: 'bg-amber-100 text-amber-800',
+      KK: 'bg-lime-100 text-lime-800'
     };
     return colors[type] || 'bg-gray-100 text-gray-800';
   };
