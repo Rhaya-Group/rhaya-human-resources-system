@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, Link } from "react-router-dom";
 import apiClient from "../../api/client";
-import { STAGES, STAGE_LABELS, StageBadge } from "../../utils/stages";
+import { STAGES, STAGE_LABELS, StageBadge } from "../../utils/stages.jsx";
 
 export default function Pipeline() {
   const { id } = useParams();
