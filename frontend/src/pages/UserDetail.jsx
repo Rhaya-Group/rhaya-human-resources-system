@@ -9,6 +9,7 @@ import PayslipsTab from "../components/PayslipsTab";
 import OvertimeRecapTab from "../components/OvertimeRecapTab";
 import LeaveHistoryTab from "../components/LeaveHistoryTab";
 import OffboardingTab from "../components/OffboardingTab";
+import EmergencyContacts from "../components/EmergencyContacts";
 
 export default function UserDetail() {
   const { userId } = useParams();
@@ -718,6 +719,9 @@ export default function UserDetail() {
               </div>
             </div>
           </div>
+
+          {/* Emergency Contacts (read-only — employee manages their own) */}
+          <EmergencyContacts userId={userId} canEdit={false} variant="plain" />
 
           {/* Employment Info */}
           <div className="bg-white rounded-lg shadow p-6">

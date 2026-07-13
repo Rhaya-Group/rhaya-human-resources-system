@@ -2,16 +2,22 @@
 import prisma from "../config/database.js";
 import { deleteFromR2 } from "../config/storage.js";
 
+// Personal-ID document types an employee may self-upload (contracts stay HR-only)
+const SELF_UPLOADABLE_TYPES = ["KTP", "NPWP", "BPJS_Kesehatan", "BPJS_TK", "SIM", "KK"];
+
 /**
  * Upload employee document
  * POST /api/users/:userId/documents/upload
- * Admin only
+ * HR (Level 1-2): any document type, any employee.
+ * Employee: only their own personal-ID documents (KTP/NPWP/BPJS/SIM/KK).
  */
 export const uploadDocument = async (req, res) => {
   try {
     const { userId } = req.params;
-    const { documentType, startDate, endDate, notes } = req.body;
+    const { documentType, documentNumber, startDate, endDate, notes } = req.body;
     const uploadedById = req.user.id;
+    const isAdmin = req.user.accessLevel <= 2;
+    const isSelf = req.user.id === userId;
 
     // Validate file
     if (!req.file) {
@@ -21,6 +27,19 @@ export const uploadDocument = async (req, res) => {
     // Validate required fields
     if (!documentType) {
       return res.status(400).json({ error: "Document type is required" });
+    }
+
+    // Access control: HR can upload anything for anyone; employees can only
+    // self-upload their own personal-ID documents.
+    if (!isAdmin) {
+      if (!isSelf) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      if (!SELF_UPLOADABLE_TYPES.includes(documentType)) {
+        return res.status(403).json({
+          error: "You can only upload personal identification documents (KTP, NPWP, BPJS, SIM, KK)",
+        });
+      }
     }
 
     // Check if user exists
@@ -91,6 +110,7 @@ export const uploadDocument = async (req, res) => {
         fileSize: req.file.size,
         mimeType: req.file.mimetype,
         documentType,
+        documentNumber: documentNumber || null,
         startDate: startDate ? new Date(startDate) : null,
         endDate: endDate ? new Date(endDate) : null,
         notes,
@@ -194,7 +214,7 @@ export const getDocumentById = async (req, res) => {
   try {
     const { userId, documentId } = req.params;
     const requestingUserId = req.user.id;
-    const isAdmin = req.user.accessLevel === 1;
+    const isAdmin = req.user.accessLevel <= 2;
 
     // Check access
     if (!isAdmin && requestingUserId !== userId) {
@@ -249,7 +269,7 @@ export const downloadDocument = async (req, res) => {
   try {
     const { userId, documentId } = req.params;
     const requestingUserId = req.user.id;
-    const isAdmin = req.user.accessLevel === 1;
+    const isAdmin = req.user.accessLevel <= 2;
 
     // Check access
     if (!isAdmin && requestingUserId !== userId) {
@@ -298,7 +318,7 @@ export const downloadDocument = async (req, res) => {
 export const updateDocument = async (req, res) => {
   try {
     const { userId, documentId } = req.params;
-    const { fileName, documentType, startDate, endDate, status, notes } =
+    const { fileName, documentType, documentNumber, startDate, endDate, status, notes } =
       req.body;
 
     const document = await prisma.employeeDocument.findFirst({
@@ -317,6 +337,7 @@ export const updateDocument = async (req, res) => {
       data: {
         ...(fileName && { fileName }),
         ...(documentType && { documentType }),
+        ...(documentNumber !== undefined && { documentNumber: documentNumber || null }),
         ...(startDate && { startDate: new Date(startDate) }),
         ...(endDate && { endDate: new Date(endDate) }),
         ...(status && { status }),
