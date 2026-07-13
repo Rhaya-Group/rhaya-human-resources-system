@@ -20,6 +20,8 @@ git checkout development && git pull origin development
 git checkout -b feat/your-feature
 ```
 
+**Small/routine changes:** `development` is unprotected — committing and pushing directly to it is fine (`git push origin development`), no feature branch or PR needed. Reserve feat/fix/chore branches + PR for changes you want reviewed before they land.
+
 ---
 
 ## Commits
@@ -40,10 +42,10 @@ Subject line ≤ 50 chars. Body explains the *why*, not the *what*.
 
 ## Pull requests
 
-Workflow: `feat/* → development → main`
+Workflow: `feat/* → development → main` (only two long-lived branches: `development` and `main`)
 
-- Day-to-day: PR feature branch → `development` (integration)
-- Release: PR `development` → `main` (triggers Railway deploy)
+- Day-to-day: commit directly to `development`, or PR a feat/fix/chore branch → `development` if you want review first
+- Release: PR `development` → `main` (protected, review required, triggers Railway prod deploy)
 
 ```bash
 git push origin feat/your-feature

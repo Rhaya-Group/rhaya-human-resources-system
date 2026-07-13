@@ -79,4 +79,4 @@ Recruitment pipeline stages (12): `applied → screening → case_study_1 → in
 
 ## Branch workflow
 
-`main` = production. Always branch: `feat/`, `fix/`, `chore/`. PR required to merge. See `CONTRIBUTING.md`.
+Two long-lived branches: `main` (production, protected, PR-only) and `development` (integration, unprotected). Commit directly to `development` for routine changes; use `feat/`/`fix/`/`chore/` branches + PR into `development` when you want review first. Promote `development` → `main` via PR to release. See `CONTRIBUTING.md`.
