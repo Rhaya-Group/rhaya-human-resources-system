@@ -383,6 +383,7 @@ export const getMyLeaveBalance = async (req, res) => {
     const balance = await leaveService.getOrCreateLeaveBalance(
       employeeId,
       employee.joinDate,
+      employee.employeeStatus,
     );
 
     return res.json({

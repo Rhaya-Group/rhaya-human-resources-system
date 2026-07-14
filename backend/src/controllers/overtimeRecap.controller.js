@@ -8,6 +8,7 @@ import {
   sendEmail,
   sendOvertimeReminderEmail,
 } from "../services/email.service.js";
+import { calculateAnnualLeaveQuota } from "../services/leave.service.js";
 
 const prisma = new PrismaClient();
 
@@ -406,6 +407,10 @@ async function processEmployeeRecap({
       });
 
       // 11. Update leave balance with TOIL
+      // Uses the same tenure-based quota formula as leave.service.js if this
+      // is the first thing to ever create the employee's balance row for
+      // the year — previously hardcoded to 12, disagreeing with policy.
+      const fallbackQuota = calculateAnnualLeaveQuota(employee.joinDate, employee.employeeStatus);
       await prisma.leaveBalance.upsert({
         where: {
           employeeId_year: {
@@ -421,9 +426,9 @@ async function processEmployeeRecap({
         create: {
           employeeId: employee.id,
           year: year,
-          annualQuota: 12,
+          annualQuota: fallbackQuota,
           annualUsed: 0,
-          annualRemaining: 12,
+          annualRemaining: fallbackQuota,
           toilBalance: toilDaysCreated,
           toilUsed: 0,
           toilExpired: 0,
@@ -510,6 +515,8 @@ export const addLateOvertime = async (req, res) => {
         nip: true,
         email: true,
         plottingCompanyId: true,
+        joinDate: true,
+        employeeStatus: true,
       },
     });
 
