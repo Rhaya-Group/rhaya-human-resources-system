@@ -1,6 +1,7 @@
 // backend/src/services/scheduler.service.js
 import cron from "node-cron";
 import leaveReminderService from "./leaveReminder.service.js";
+import contractReminderService from "./contractReminder.service.js";
 import { moveExpiredPlansToActualization } from "../controllers/overtime.controller.js";
 import { syncTodayWfhStatuses } from "../controllers/wfh.controller.js";
 
@@ -66,6 +67,17 @@ export function initializeScheduler() {
     () => syncTodayWfhStatuses(),
   );
 
+  // ── 4. Contract expiry reminder ──────────────────────────────────────────
+  // Runs daily at 8:15 AM
+  // Sends HR (+ supervisor CC) reminders at H-30/H-14/H-7 and on the day
+  // a contract expires (User.contractEndDate)
+  register(
+    "contract-expiry-reminder",
+    "15 8 * * *",
+    "Send contract expiry reminders at H-30/H-14/H-7 and on expiry day",
+    () => contractReminderService.sendContractExpiryReminders(),
+  );
+
   console.log(`[Scheduler] Active jobs: ${scheduledJobs.length}`);
 }
 
@@ -124,10 +136,23 @@ export async function manualTriggerActualizationCheck() {
   }
 }
 
+export async function manualTriggerContractExpiryReminder() {
+  console.log("[Scheduler] Manual trigger: contract-expiry-reminder");
+  try {
+    const result = await contractReminderService.sendContractExpiryReminders();
+    console.log("[Scheduler] Manual contract expiry reminder completed:", result);
+    return result;
+  } catch (err) {
+    console.error("[Scheduler] Manual contract expiry reminder failed:", err);
+    throw err;
+  }
+}
+
 export default {
   initializeScheduler,
   stopScheduler,
   getSchedulerStatus,
   manualTriggerLeaveReminder,
   manualTriggerActualizationCheck,
+  manualTriggerContractExpiryReminder,
 };
