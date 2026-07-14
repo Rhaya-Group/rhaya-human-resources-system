@@ -19,6 +19,7 @@ import {
   updateUserProfile,
   hasSubordinates,
   getAccessibleEntities,
+  getContractExpirations,
 } from "../controllers/user.controller.js";
 import { assignScopeToAdmin } from "../controllers/admin.controller.js";
 
@@ -44,6 +45,9 @@ router.get(
   authorizeHR,
   getAccessibleEntities,
 );
+
+// Contract expirations widget (must come before /:userId)
+router.get("/contract-expirations", requireRole([1, 2]), getContractExpirations);
 
 // Get single user
 router.get("/:userId", requireRole([1, 2]), getUserById);

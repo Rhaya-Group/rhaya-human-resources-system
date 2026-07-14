@@ -25,6 +25,7 @@ import policyTemplateRoutes from "./routes/policyTemplate.routes.js";
 import entitySubgroupRoutes from "./routes/entitySubgroup.routes.js";
 
 import leaveReminderTestRoutes from "./routes/leaveReminderTest.routes.js";
+import contractReminderTestRoutes from "./routes/contractReminderTest.routes.js";
 import workStatusRoutes from "./routes/workStatus.routes.js";
 import wfhRoutes from "./routes/wfh.routes.js";
 
@@ -187,6 +188,7 @@ app.use("/api/plotting-companies", plottingCompanyRoutes);
 app.use("/api/users/:userId/documents", documentRoutes);
 app.use("/api/users/:userId/emergency-contacts", emergencyContactRoutes);
 app.use("/api/admin/leave-reminder", leaveReminderTestRoutes);
+app.use("/api/admin/contract-reminder", contractReminderTestRoutes);
 
 // Static file serving for uploads (protected)
 app.use("/uploads", authenticateToken, express.static("uploads"));

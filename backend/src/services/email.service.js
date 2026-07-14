@@ -4760,6 +4760,77 @@ export async function sendOvertimeActualizationNeededEmail(
   });
 }
 
+/**
+ * Contract expiry reminder — sent to HR (to) with the employee's supervisor
+ * CC'd, at H-30/H-14/H-7 and on the day the contract expires.
+ *
+ * @param {Object} employee          - User record (must include division, supervisor)
+ * @param {number} daysUntilExpiry   - 30, 14, 7, or 0 (0 = expires today)
+ * @param {Object} [options]
+ * @param {string} [options.hrEmail]
+ * @param {string} [options.smtpProfile]
+ */
+export async function sendContractExpiryReminderEmail(
+  employee,
+  daysUntilExpiry,
+  { hrEmail, smtpProfile } = {},
+) {
+  const isExpired = daysUntilExpiry <= 0;
+  const contractEndStr = new Date(employee.contractEndDate).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+
+  const statusColor = isExpired ? "#DC2626" : daysUntilExpiry <= 7 ? "#D97706" : BRAND_COLORS.primary;
+  const headline = isExpired ? "Contract Expired" : `Contract Expiring — H-${daysUntilExpiry}`;
+  const subject = isExpired
+    ? `Contract Expired: ${employee.name}${employee.nip ? ` (${employee.nip})` : ""}`
+    : `Contract Expiring in ${daysUntilExpiry} Day${daysUntilExpiry === 1 ? "" : "s"}: ${employee.name}`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background:#F9F9F9; margin:0; padding:0;">
+      <div style="max-width:600px;margin:0 auto;padding:40px 20px;">
+        <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+          <div style="background:${statusColor};color:#fff;padding:30px;text-align:center;">
+            <h1 style="margin:0;font-size:22px;">${headline}</h1>
+          </div>
+          <div style="padding:30px;">
+            <p style="font-size:15px;color:${BRAND_COLORS.textPrimary};">
+              ${
+                isExpired
+                  ? "This employee's contract has <strong>expired</strong>. Please review and take action (renew, extend, or process offboarding)."
+                  : `This employee's contract is set to expire in <strong>${daysUntilExpiry} day${daysUntilExpiry === 1 ? "" : "s"}</strong>. Please review and plan for renewal or offboarding.`
+              }
+            </p>
+            <div style="background:${BRAND_COLORS.cardBg};border:1px solid ${BRAND_COLORS.cardBorder};border-radius:10px;padding:20px;margin:20px 0;">
+              <table style="width:100%;font-size:14px;color:${BRAND_COLORS.textPrimary};">
+                <tr><td style="padding:6px 0;font-weight:600;width:140px;">Employee</td><td>${employee.name}</td></tr>
+                <tr><td style="padding:6px 0;font-weight:600;">NIP</td><td>${employee.nip || "N/A"}</td></tr>
+                <tr><td style="padding:6px 0;font-weight:600;">Division</td><td>${employee.division?.name || "N/A"}</td></tr>
+                <tr><td style="padding:6px 0;font-weight:600;">Status</td><td>${employee.employeeStatus}</td></tr>
+                <tr><td style="padding:6px 0;font-weight:600;">Contract End</td><td>${contractEndStr}</td></tr>
+              </table>
+            </div>
+            <p style="font-size:13px;color:${BRAND_COLORS.textSecondary};">View or update this employee's contract details in the HR system.</p>
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: hrEmail || process.env.HR_EMAIL || "hr@rhayaflicks.com",
+    cc: employee.supervisor?.email || undefined,
+    subject,
+    html,
+    smtpProfile,
+  });
+}
+
 export default {
   sendEmail,
   sendOvertimeApprovedEmail,
@@ -4779,4 +4850,5 @@ export default {
   sendAdminRejectOvertimeEmail,
   sendOvertimePlanApprovedEmail,
   sendOvertimeActualizationNeededEmail,
+  sendContractExpiryReminderEmail,
 };

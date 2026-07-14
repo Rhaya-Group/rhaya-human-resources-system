@@ -6,6 +6,7 @@ import apiClient from "../api/client";
 import Select from "react-select";
 import EntitySelector from "../components/EntitySelector";
 import EntityGroupSelector from "../components/EntityGroupSelector";
+import ContractExpirationWidget from "../components/ContractExpirationWidget";
 
 export default function UserManagement() {
   const { user, loading } = useAuth();
@@ -1015,6 +1016,8 @@ export default function UserManagement() {
           Create User
         </button>
       </div>
+
+      <ContractExpirationWidget />
 
       {/* Filters */}
       <div className="mb-6 bg-white rounded-lg shadow p-4">

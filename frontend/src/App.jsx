@@ -40,6 +40,7 @@ import WfhAdmin from "./pages/WfhAdmin";
 
 // Recruitment
 import QuestionBank from "./pages/recruitment/QuestionBank";
+import QuestionAssignment from "./pages/recruitment/QuestionAssignment";
 import JobPostings from "./pages/recruitment/JobPostings";
 import Pipeline from "./pages/recruitment/Pipeline";
 
@@ -68,7 +69,7 @@ const queryClient = new QueryClient({
 });
 
 // Protected route wrapper
-function ProtectedRoute({ children }) {
+function ProtectedRoute({ children, allowedLevels, requiredLevel }) {
   const { user, loading } = useAuth();
   const { t } = useTranslation();
 
@@ -103,6 +104,14 @@ function ProtectedRoute({ children }) {
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (allowedLevels && !allowedLevels.includes(user.accessLevel)) {
+    return <Navigate to="/" replace />;
+  }
+
+  if (requiredLevel && user.accessLevel > requiredLevel) {
+    return <Navigate to="/" replace />;
   }
 
   return <Layout>{children}</Layout>;
@@ -372,6 +381,14 @@ function App() {
             element={
               <ProtectedRoute allowedLevels={[1, 2]}>
                 <Pipeline />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recruitment/jobs/:postingId/questions"
+            element={
+              <ProtectedRoute allowedLevels={[1, 2]}>
+                <QuestionAssignment />
               </ProtectedRoute>
             }
           />

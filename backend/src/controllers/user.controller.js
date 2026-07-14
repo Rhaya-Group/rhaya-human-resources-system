@@ -8,8 +8,29 @@ import {
   getTokenExpiration,
 } from "../services/passwordResetToken.service.js";
 import { applyScopeFilter } from "../utils/scopeHelper.js";
+import { getUpcomingContractExpirations } from "../services/contractReminder.service.js";
 
 const prisma = new PrismaClient();
+
+/**
+ * Get employees with contracts expiring soon (or already expired) for the
+ * HR dashboard widget. Grouped into expired/h7/h14/h30 buckets.
+ * GET /api/users/contract-expirations
+ * HR (Level 1-2), Level-2 scoped to their assigned entities
+ */
+export const getContractExpirations = async (req, res) => {
+  try {
+    const where = applyScopeFilter({}, req.user);
+    const buckets = await getUpcomingContractExpirations({ withinDays: 30, where });
+    return res.json({ success: true, data: buckets });
+  } catch (error) {
+    console.error("Get contract expirations error:", error);
+    return res.status(500).json({
+      error: "Failed to fetch contract expirations",
+      message: error.message,
+    });
+  }
+};
 
 /**
  * Get all users
