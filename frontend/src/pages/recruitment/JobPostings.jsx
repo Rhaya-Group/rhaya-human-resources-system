@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { Users, Pencil, Trash2 } from "lucide-react";
+import { ListChecks, Users, Pencil, Trash2 } from "lucide-react";
 import apiClient from "../../api/client";
 
 const EMPTY = {
@@ -140,8 +140,12 @@ export default function JobPostings() {
                 </div>
               </div>
               <Link to={`/recruitment/jobs/${job.id}/pipeline`}
-                className="mt-3 inline-flex items-center gap-1 text-sm text-blue-600 hover:underline">
+                className="mt-3 mr-4 inline-flex items-center gap-1 text-sm text-blue-600 hover:underline">
                 <Users className="w-4 h-4" /> {job._count?.applications ?? 0} applicant(s) · pipeline
+              </Link>
+              <Link to={`/recruitment/jobs/${job.id}/questions`}
+                className="mt-3 inline-flex items-center gap-1 text-sm text-blue-600 hover:underline">
+                <ListChecks className="w-4 h-4" /> Manage Questions
               </Link>
             </div>
           ))}
