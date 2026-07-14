@@ -3,6 +3,7 @@
 // Run on January 1st every year via cron or Railway scheduled job
 
 import { PrismaClient } from '@prisma/client';
+import { calculateAnnualLeaveQuota } from '../src/services/leave.service.js';
 
 const prisma = new PrismaClient();
 
@@ -42,16 +43,12 @@ async function createYearlyBalances(targetYear = null) {
 
     for (const user of users) {
       try {
-        let annualQuota = 0;
-        
-        if (user.employeeStatus === 'PKWTT') {
-          annualQuota = 14;
-        } else if (user.employeeStatus === 'PKWT') {
-          const joinDate = user.joinDate || user.createdAt;
-          const monthsSinceJoining = 
-            (year - joinDate.getFullYear()) * 12 + (0 - joinDate.getMonth());
-          annualQuota = monthsSinceJoining >= 12 ? 14 : 10;
-        }
+        // Same formula the live app uses (leave.service.js) — tenure-based
+        // for PKWT/PKWTT, 0 for everyone else. No PKWTT flat-quota special
+        // case; getOrCreateLeaveBalance will keep this in sync as tenure
+        // progresses through the year.
+        const joinDate = user.joinDate || user.createdAt;
+        const annualQuota = calculateAnnualLeaveQuota(joinDate, user.employeeStatus);
 
         await prisma.leaveBalance.create({
           data: {

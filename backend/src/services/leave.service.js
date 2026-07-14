@@ -22,44 +22,68 @@ export const calculateWorkingDays = (startDate, endDate) => {
   return workingDays;
 };
 
+// Employment statuses eligible for the tenure-based annual leave quota ramp.
+// Anything else (INTERNSHIP, ADMIN, etc.) gets 0 — they don't accrue annual leave.
+const ANNUAL_LEAVE_ELIGIBLE_STATUSES = ['PKWT', 'PKWTT'];
+
 /**
- * Calculate annual leave quota based on tenure
+ * Calculate annual leave quota based on tenure.
+ * Policy: >=12 months tenure = 14 days, <12 months = 10 days — applies
+ * uniformly to PKWT and PKWTT (no flat quota for either). Statuses that
+ * don't accrue annual leave (interns, admin/system accounts) get 0.
  */
-export const calculateAnnualLeaveQuota = (joinDate) => {
+export const calculateAnnualLeaveQuota = (joinDate, employeeStatus) => {
+  if (employeeStatus && !ANNUAL_LEAVE_ELIGIBLE_STATUSES.includes(employeeStatus)) {
+    return 0;
+  }
+
   const now = new Date();
   const join = new Date(joinDate);
-  const monthsWorked = (now.getFullYear() - join.getFullYear()) * 12 + 
+  const monthsWorked = (now.getFullYear() - join.getFullYear()) * 12 +
                        (now.getMonth() - join.getMonth());
-  
+
   // More than 12 months = 14 days, less than 12 months = 10 days
   return monthsWorked >= 12 ? 14 : 10;
 };
 
 /**
  * Get or create leave balance for current year
- * Uses upsert to handle race conditions and schema constraints
+ *
+ * When the recalculated quota differs from what's stored (tenure crossed
+ * the 12-month mark, or employeeStatus changed e.g. intern -> staff),
+ * annualRemaining is adjusted by the same delta so it stays in sync with
+ * the new quota instead of silently drifting.
  */
-export const getOrCreateLeaveBalance = async (employeeId, joinDate) => {
+export const getOrCreateLeaveBalance = async (employeeId, joinDate, employeeStatus) => {
   const currentYear = new Date().getFullYear();
-  const annualQuota = calculateAnnualLeaveQuota(joinDate);
-  
+  const annualQuota = calculateAnnualLeaveQuota(joinDate, employeeStatus);
+
   try {
-    // Use upsert to handle both creation and retrieval atomically
-    const balance = await prisma.leaveBalance.upsert({
+    const existing = await prisma.leaveBalance.findUnique({
       where: {
         employeeId_year: {
           employeeId,
           year: currentYear
         }
-      },
-      update: {
-        // Update quota in case tenure changed
-        annualQuota,
-        annualRemaining: {
-          increment: 0 // Don't change remaining, just ensure quota is current
-        }
-      },
-      create: {
+      }
+    });
+
+    if (existing) {
+      const quotaDelta = annualQuota - existing.annualQuota;
+      const balance = quotaDelta === 0
+        ? existing
+        : await prisma.leaveBalance.update({
+            where: { id: existing.id },
+            data: {
+              annualQuota,
+              annualRemaining: { increment: quotaDelta }
+            }
+          });
+      return balance;
+    }
+
+    return await prisma.leaveBalance.create({
+      data: {
         employeeId,
         year: currentYear,
         annualQuota,
@@ -73,8 +97,6 @@ export const getOrCreateLeaveBalance = async (employeeId, joinDate) => {
         toilExpired: 0
       }
     });
-    
-    return balance;
   } catch (error) {
     console.error('Error in getOrCreateLeaveBalance:', error);
     throw error;
@@ -137,7 +159,7 @@ export const validateLeaveRequest = async (employeeId, leaveType, startDate, end
   // Get employee data
   const employee = await prisma.user.findUnique({
     where: { id: employeeId },
-    select: { gender: true, joinDate: true }
+    select: { gender: true, joinDate: true, employeeStatus: true }
   });
   
   if (!employee) {
@@ -237,7 +259,7 @@ export const validateLeaveRequest = async (employeeId, leaveType, startDate, end
   // Validate annual leave quota
   if (leaveType === 'ANNUAL_LEAVE') {
     try {
-      const balance = await getOrCreateLeaveBalance(employeeId, employee.joinDate);
+      const balance = await getOrCreateLeaveBalance(employeeId, employee.joinDate, employee.employeeStatus);
       
       if (balance.annualRemaining < workingDays) {
         errors.push(`Insufficient annual leave balance. You have ${balance.annualRemaining} days remaining`);
@@ -252,7 +274,7 @@ export const validateLeaveRequest = async (employeeId, leaveType, startDate, end
   if (leaveType === 'UNPAID_LEAVE') {
     try {
       const currentYear = new Date().getFullYear();
-      const balance = await getOrCreateLeaveBalance(employeeId, employee.joinDate);
+      const balance = await getOrCreateLeaveBalance(employeeId, employee.joinDate, employee.employeeStatus);
       
       const unpaidUsed = balance?.unpaidLeaveUsed || 0;
       
