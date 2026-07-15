@@ -5,6 +5,7 @@
 
 import prisma from "../config/database.js";
 import { canAccessEntity } from "./jobPosting.controller.js";
+import { ruleMatches } from "../utils/recruitmentKnockout.js";
 
 const STAGES = [
   "applied",
@@ -23,11 +24,48 @@ const STAGES = [
 
 // ─── Candidate ─────────────────────────────────────────────────────────────────
 
+// GET /api/recruitment/public/jobs/:id/questions
+export const listPublicQuestions = async (req, res) => {
+  try {
+    const jobPostingId = req.params.id;
+
+    const posting = await prisma.jobPosting.findUnique({
+      where: { id: jobPostingId },
+      select: { id: true, status: true },
+    });
+    if (!posting || posting.status !== "OPEN") {
+      return res.status(404).json({ error: "Job not found or not open" });
+    }
+
+    const questions = await prisma.positionQuestion.findMany({
+      where: { jobPostingId, question: { is: { scope: "position" } } },
+      include: {
+        question: {
+          select: {
+            id: true,
+            text: true,
+            type: true,
+          },
+        },
+      },
+      orderBy: { order: "asc" },
+    });
+
+    return res.json(questions);
+  } catch (error) {
+    console.error("List public questions error:", error);
+    return res.status(500).json({ error: "Failed to fetch questions" });
+  }
+};
+
 // POST /api/recruitment/public/jobs/:id/apply   (applicantAuthenticate)
 export const apply = async (req, res) => {
   try {
     const jobPostingId = req.params.id;
-    const { coverLetter, resumeUrl } = req.body;
+    const { coverLetter, resumeUrl, answers = [] } = req.body;
+    if (!Array.isArray(answers)) {
+      return res.status(400).json({ error: "answers must be an array" });
+    }
 
     const posting = await prisma.jobPosting.findUnique({
       where: { id: jobPostingId },
@@ -44,21 +82,64 @@ export const apply = async (req, res) => {
       return res.status(409).json({ error: "You have already applied to this job" });
     }
 
-    const application = await prisma.jobApplication.create({
-      data: {
-        jobPostingId,
-        applicantId: req.applicant.id,
-        coverLetter: coverLetter || null,
-        resumeUrl: resumeUrl || req.applicant.resumeUrl || null,
-        events: {
-          create: {
-            type: "STAGE_CHANGE",
-            toStage: "applied",
-            actorType: "APPLICANT",
-            actorId: req.applicant.id,
+    const submittedAnswers = answers.filter((answer) => answer.value !== undefined && answer.value !== null);
+    const assignedQuestions = await prisma.positionQuestion.findMany({
+      where: { jobPostingId, question: { is: { scope: "position" } } },
+      include: { question: true },
+    });
+    const questionsById = new Map(assignedQuestions.map((row) => [row.questionId, row.question]));
+    const answeredIds = new Set();
+    for (const answer of submittedAnswers) {
+      if (!questionsById.has(answer.questionId)) {
+        return res.status(400).json({ error: "answers contain a question not assigned to this job" });
+      }
+      if (answeredIds.has(answer.questionId)) {
+        return res.status(400).json({ error: "answers contain duplicate questions" });
+      }
+      answeredIds.add(answer.questionId);
+    }
+
+    const matchedRules = submittedAnswers
+      .map((answer) => ({ answer, question: questionsById.get(answer.questionId) }))
+      .filter(({ answer, question }) =>
+        question?.isKnockout && ruleMatches(question.knockoutRule, answer.value)
+      );
+    const hardRejected = matchedRules.some(({ question }) => question.knockoutRule?.soft !== true);
+    const softFlagged = !hardRejected && matchedRules.some(({ question }) => question.knockoutRule?.soft === true);
+    const stage = hardRejected ? "rejected" : "applied";
+
+    const application = await prisma.$transaction(async (tx) => {
+      const created = await tx.jobApplication.create({
+        data: {
+          jobPostingId,
+          applicantId: req.applicant.id,
+          stage,
+          knockoutFlagged: softFlagged,
+          coverLetter: coverLetter || null,
+          resumeUrl: resumeUrl || req.applicant.resumeUrl || null,
+          rejectedReason: hardRejected ? "Screening knockout" : null,
+          events: {
+            create: {
+              type: "STAGE_CHANGE",
+              toStage: stage,
+              actorType: hardRejected ? "SYSTEM" : "APPLICANT",
+              actorId: req.applicant.id,
+            },
           },
         },
-      },
+      });
+
+      if (submittedAnswers.length) {
+        await tx.answer.createMany({
+          data: submittedAnswers.map((answer) => ({
+            applicationId: created.id,
+            questionId: answer.questionId,
+            value: answer.value,
+          })),
+        });
+      }
+
+      return created;
     });
     return res.status(201).json(application);
   } catch (error) {
@@ -249,5 +330,5 @@ export const addNote = async (req, res) => {
 };
 
 export default {
-  apply, listMine, withdraw, listForHr, getForHr, updateStage, addNote,
+  apply, listPublicQuestions, listMine, withdraw, listForHr, getForHr, updateStage, addNote,
 };
