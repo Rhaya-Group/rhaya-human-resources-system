@@ -4,6 +4,7 @@ import apiClient from '../api/client';
 import DocumentPreviewModal from './DocumentPreviewModal';
 import {
   CONTRACT_TYPES,
+  CONTRACT_PERIOD_TYPES,
   PERSONAL_DOC_TYPES,
   PERSONAL_TYPE_VALUES,
   ALLOWED_FILE_TYPES,
@@ -63,9 +64,12 @@ function RowActions({ doc, isAdmin, onPreview, onDownload, onEdit, onDelete }) {
   );
 }
 
-// Flat table used for Contracts (no version grouping — amendments legitimately
-// coexist alongside the base contract, so grouping by type would be misleading).
-function ContractTable({ documents, isAdmin, onPreview, onDownload, onEdit, onDelete, emptyLabel }) {
+// Grouped view for Contracts: one row per document type showing the latest
+// upload, with older re-uploads (renewals) collapsed behind a toggle. Latest
+// PKWT/PKWTT/Amendment upload is what drives the synced contract period.
+function ContractDocGroups({ documents, isAdmin, onPreview, onDownload, onEdit, onDelete, emptyLabel }) {
+  const [expanded, setExpanded] = useState({});
+
   if (documents.length === 0) {
     return (
       <div className="bg-white rounded-lg shadow p-6">
@@ -78,6 +82,60 @@ function ContractTable({ documents, isAdmin, onPreview, onDownload, onEdit, onDe
       </div>
     );
   }
+
+  const groups = {};
+  documents.forEach((doc) => {
+    if (!groups[doc.documentType]) groups[doc.documentType] = [];
+    groups[doc.documentType].push(doc);
+  });
+  Object.values(groups).forEach((docs) => docs.sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt)));
+
+  const renderRow = (doc, isHistory) => {
+    const expiry = getExpiryInfo(doc.endDate);
+    return (
+      <tr key={doc.id} className={`hover:bg-gray-50 ${isHistory ? 'bg-gray-50/50' : ''}`}>
+        <td className="px-6 py-4">
+          <div className={isHistory ? 'pl-8' : ''}>
+            <FileCell doc={doc} />
+          </div>
+        </td>
+        <td className="px-6 py-4">
+          {!isHistory && (
+            <span className={`px-2 py-1 text-xs font-medium rounded-full ${getTypeBadge(doc.documentType)}`}>
+              {doc.documentType}
+            </span>
+          )}
+        </td>
+        <td className="px-6 py-4 text-sm text-gray-900">
+          {doc.startDate && doc.endDate ? (
+            <div>
+              <div>{formatDate(doc.startDate)}</div>
+              <div className="text-xs text-gray-500">to {formatDate(doc.endDate)}</div>
+              {expiry && (
+                <span className={`inline-block mt-1 px-2 py-0.5 text-xs font-medium rounded-full ${expiry.className}`}>
+                  {expiry.label}
+                </span>
+              )}
+            </div>
+          ) : (
+            '-'
+          )}
+        </td>
+        <td className="px-6 py-4">
+          <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusBadge(doc.status)}`}>
+            {doc.status}
+          </span>
+        </td>
+        <td className="px-6 py-4 text-sm text-gray-500">
+          <div>{formatDate(doc.uploadedAt)}</div>
+          <div className="text-xs">by {doc.uploadedBy.name}</div>
+        </td>
+        <td className="px-6 py-4 text-sm font-medium">
+          <RowActions doc={doc} isAdmin={isAdmin} onPreview={onPreview} onDownload={onDownload} onEdit={onEdit} onDelete={onDelete} />
+        </td>
+      </tr>
+    );
+  };
 
   return (
     <div className="bg-white rounded-lg shadow overflow-hidden overflow-x-auto">
@@ -93,46 +151,26 @@ function ContractTable({ documents, isAdmin, onPreview, onDownload, onEdit, onDe
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
-          {documents.map((doc) => {
-            const expiry = getExpiryInfo(doc.endDate);
+          {Object.entries(groups).map(([type, docs]) => {
+            const [current, ...history] = docs;
+            const isExpanded = !!expanded[type];
             return (
-              <tr key={doc.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4">
-                  <FileCell doc={doc} />
-                </td>
-                <td className="px-6 py-4">
-                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${getTypeBadge(doc.documentType)}`}>
-                    {doc.documentType}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-900">
-                  {doc.startDate && doc.endDate ? (
-                    <div>
-                      <div>{formatDate(doc.startDate)}</div>
-                      <div className="text-xs text-gray-500">to {formatDate(doc.endDate)}</div>
-                      {expiry && (
-                        <span className={`inline-block mt-1 px-2 py-0.5 text-xs font-medium rounded-full ${expiry.className}`}>
-                          {expiry.label}
-                        </span>
-                      )}
-                    </div>
-                  ) : (
-                    '-'
-                  )}
-                </td>
-                <td className="px-6 py-4">
-                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusBadge(doc.status)}`}>
-                    {doc.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-500">
-                  <div>{formatDate(doc.uploadedAt)}</div>
-                  <div className="text-xs">by {doc.uploadedBy.name}</div>
-                </td>
-                <td className="px-6 py-4 text-sm font-medium">
-                  <RowActions doc={doc} isAdmin={isAdmin} onPreview={onPreview} onDownload={onDownload} onEdit={onEdit} onDelete={onDelete} />
-                </td>
-              </tr>
+              <Fragment key={type}>
+                {renderRow(current, false)}
+                {history.length > 0 && (
+                  <tr key={`${type}-toggle`} className="bg-white">
+                    <td colSpan={6} className="px-6 py-2">
+                      <button
+                        onClick={() => setExpanded({ ...expanded, [type]: !isExpanded })}
+                        className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                      >
+                        {isExpanded ? '▾ Hide' : '▸ Show'} {history.length} older version{history.length > 1 ? 's' : ''}
+                      </button>
+                    </td>
+                  </tr>
+                )}
+                {isExpanded && history.map((doc) => renderRow(doc, true))}
+              </Fragment>
             );
           })}
         </tbody>
@@ -316,6 +354,17 @@ export default function FilesTab({ userId, isAdmin }) {
       return;
     }
 
+    if (CONTRACT_PERIOD_TYPES.includes(uploadData.documentType)) {
+      if (!uploadData.startDate || !uploadData.endDate) {
+        alert('Start date and end date are required for contract documents');
+        return;
+      }
+      const confirmed = confirm(
+        `This will update the employee's contract end date to ${formatDate(uploadData.endDate)}. Continue?`,
+      );
+      if (!confirmed) return;
+    }
+
     try {
       setUploading(true);
       const formData = new FormData();
@@ -425,6 +474,7 @@ export default function FilesTab({ userId, isAdmin }) {
 
   const isPersonalTypeSelected = PERSONAL_TYPE_VALUES.includes(uploadData.documentType);
   const isEditPersonalTypeSelected = PERSONAL_TYPE_VALUES.includes(editData.documentType);
+  const isContractPeriodTypeSelected = CONTRACT_PERIOD_TYPES.includes(uploadData.documentType);
 
   return (
     <div className="space-y-8">
@@ -469,7 +519,7 @@ export default function FilesTab({ userId, isAdmin }) {
           </div>
         </div>
 
-        <ContractTable
+        <ContractDocGroups
           documents={contractDocs}
           isAdmin={isAdmin}
           onPreview={handlePreview}
@@ -606,26 +656,37 @@ export default function FilesTab({ userId, isAdmin }) {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Start Date {isContractPeriodTypeSelected && <span className="text-red-500">*</span>}
+                  </label>
                   <input
                     type="date"
                     value={uploadData.startDate}
                     onChange={(e) => setUploadData({ ...uploadData, startDate: e.target.value })}
+                    required={isContractPeriodTypeSelected}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    {isPersonalTypeSelected ? 'Expiry Date' : 'End Date'}
+                    {isPersonalTypeSelected ? 'Expiry Date' : 'End Date'}{' '}
+                    {isContractPeriodTypeSelected && <span className="text-red-500">*</span>}
                   </label>
                   <input
                     type="date"
                     value={uploadData.endDate}
                     onChange={(e) => setUploadData({ ...uploadData, endDate: e.target.value })}
+                    required={isContractPeriodTypeSelected}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                   />
                 </div>
               </div>
+
+              {isContractPeriodTypeSelected && (
+                <p className="text-xs text-amber-600 -mt-2">
+                  Uploading this will update the employee's contract end date to match.
+                </p>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
