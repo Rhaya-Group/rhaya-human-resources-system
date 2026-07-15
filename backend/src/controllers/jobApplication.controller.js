@@ -6,7 +6,20 @@
 import prisma from "../config/database.js";
 import { canAccessEntity } from "./jobPosting.controller.js";
 
-const STAGES = ["APPLIED", "SCREENING", "INTERVIEW", "OFFER", "HIRED", "REJECTED"];
+const STAGES = [
+  "applied",
+  "screening",
+  "case_study_1",
+  "interview",
+  "case_study_2",
+  "final_interview",
+  "col_issued",
+  "background_check",
+  "offer",
+  "hired",
+  "rejected",
+  "withdrawn",
+];
 
 // ─── Candidate ─────────────────────────────────────────────────────────────────
 
@@ -40,7 +53,7 @@ export const apply = async (req, res) => {
         events: {
           create: {
             type: "STAGE_CHANGE",
-            toStage: "APPLIED",
+            toStage: "applied",
             actorType: "APPLICANT",
             actorId: req.applicant.id,
           },
@@ -181,7 +194,7 @@ export const updateStage = async (req, res) => {
         where: { id: application.id },
         data: {
           stage,
-          rejectedReason: stage === "REJECTED" ? rejectedReason || null : null,
+          rejectedReason: stage === "rejected" ? rejectedReason || null : null,
         },
       }),
       prisma.applicationEvent.create({
