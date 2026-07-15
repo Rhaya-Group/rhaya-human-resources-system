@@ -5,6 +5,12 @@ import { deleteFromR2 } from "../config/storage.js";
 // Personal-ID document types an employee may self-upload (contracts stay HR-only)
 const SELF_UPLOADABLE_TYPES = ["KTP", "NPWP", "BPJS_Kesehatan", "BPJS_TK", "SIM", "KK"];
 
+// Contract document types that define the employee's current contract period.
+// Uploading one of these syncs User.contractStartDate/contractEndDate so the
+// contract-expiry widget/reminders reflect the latest renewal automatically —
+// LoA/Internship are excluded since they don't represent an ongoing period.
+const CONTRACT_PERIOD_TYPES = ["PKWT", "PKWTT", "Amendment"];
+
 /**
  * Upload employee document
  * POST /api/users/:userId/documents/upload
@@ -27,6 +33,12 @@ export const uploadDocument = async (req, res) => {
     // Validate required fields
     if (!documentType) {
       return res.status(400).json({ error: "Document type is required" });
+    }
+
+    if (CONTRACT_PERIOD_TYPES.includes(documentType) && (!startDate || !endDate)) {
+      return res.status(400).json({
+        error: "Start date and end date are required for contract documents (PKWT/PKWTT/Amendment)",
+      });
     }
 
     // Access control: HR can upload anything for anyone; employees can only
@@ -129,6 +141,21 @@ export const uploadDocument = async (req, res) => {
     });
 
     console.log(`Document uploaded: ${document.fileName} for user ${userId}`);
+
+    // Sync the employee's contract period from this document — the newest
+    // PKWT/PKWTT/Amendment upload is treated as the current contract, so a
+    // renewal automatically clears the employee off the expiry widget
+    // instead of relying on someone remembering to edit the date field.
+    if (CONTRACT_PERIOD_TYPES.includes(documentType)) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          contractStartDate: new Date(startDate),
+          contractEndDate: new Date(endDate),
+        },
+      });
+      console.log(`Contract period synced for user ${userId}: ${startDate} -> ${endDate}`);
+    }
 
     // Format response
     const formattedDocument = {

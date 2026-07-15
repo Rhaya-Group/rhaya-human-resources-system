@@ -9,6 +9,11 @@ export const CONTRACT_TYPES = [
   { value: 'LoA', label: 'Letter of Appointment' },
 ];
 
+// Contract types that define the employee's current contract period — upload
+// syncs User.contractStartDate/contractEndDate (see document.controller.js).
+// LoA/Internship are excluded since they don't represent an ongoing period.
+export const CONTRACT_PERIOD_TYPES = ['PKWT', 'PKWTT', 'Amendment'];
+
 export const PERSONAL_DOC_TYPES = [
   { value: 'KTP', label: 'KTP (National ID)' },
   { value: 'NPWP', label: 'NPWP (Tax ID)' },
