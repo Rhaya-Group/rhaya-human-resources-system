@@ -145,6 +145,16 @@ async function processEmployeeRecap({
   isLateAddition = false,
 }) {
   try {
+    // Guard against an inverted/impossible date range (e.g. a UI bug that
+    // advances fromDate to the next cycle without moving toDate). Previously
+    // this silently matched zero overtime entries and overwrote a correct
+    // recap's totals with 0 on re-run.
+    if (new Date(fromDate) > new Date(toDate)) {
+      throw new Error(
+        `Invalid date range: fromDate (${fromDate}) is after toDate (${toDate})`,
+      );
+    }
+
     // Check for pending overtimes in date range
     const pendingOvertimes = await prisma.overtimeRequest.findMany({
       where: {
@@ -208,12 +218,17 @@ async function processEmployeeRecap({
       };
     }
 
-    // 2. Get approved overtimes in date range that haven't been recapped
-    const approvedOvertimes = await prisma.overtimeRequest.findMany({
+    // 2a. Get ALL approved overtimes in date range — regardless of isRecapped
+    // — since totalHours must always reflect the true cumulative total for
+    // the period, whether this is the first run or a re-run. Filtering to
+    // isRecapped:false here was the root cause of the June bug: a re-run
+    // (deliberate late-addition or an accidental duplicate) would only sum
+    // the newly-unrecapped batch and overwrite totalHours with just that,
+    // discarding everything already correctly recapped.
+    const allApprovedOvertimes = await prisma.overtimeRequest.findMany({
       where: {
         employeeId: employee.id,
         status: "APPROVED",
-        isRecapped: false,
         entries: {
           some: {
             date: {
@@ -236,6 +251,11 @@ async function processEmployeeRecap({
       },
     });
 
+    // 2b. Of those, the subset not yet flagged recapped — only these get
+    // isRecapped/recapId set in step 8, so already-recapped requests aren't
+    // needlessly re-touched.
+    const newlyApprovedOvertimes = allApprovedOvertimes.filter((ot) => !ot.isRecapped);
+
     // Check if recap already exists
     const existingRecap = await prisma.overtimeRecap.findUnique({
       where: {
@@ -247,8 +267,8 @@ async function processEmployeeRecap({
       },
     });
 
-    // Calculate current totals
-    const totalHours = approvedOvertimes.reduce(
+    // Calculate current totals — true cumulative total for the period
+    const totalHours = allApprovedOvertimes.reduce(
       (sum, ot) => sum + ot.entries.reduce((s, e) => s + e.hours, 0),
       0,
     );
@@ -265,10 +285,11 @@ async function processEmployeeRecap({
     const toilDaysCreated = Math.floor(totalToilHours / 8);
     const remainingHours = totalToilHours % 8;
 
-    // ✅ NEW: Calculate late addition hours
+    // Calculate late addition hours — delta added by THIS run specifically,
+    // vs. the recap's previous stored cumulative total (not originalTotalHours,
+    // which would overstate the delta across multiple genuine late-addition runs).
     const lateAdditionHours = existingRecap
-      ? totalHours -
-        (existingRecap.originalTotalHours || existingRecap.totalHours)
+      ? totalHours - existingRecap.totalHours
       : 0;
 
     // SMART UPSERT: Preserve original data
@@ -365,11 +386,12 @@ async function processEmployeeRecap({
       });
     }
 
-    // 8. Mark overtimes as recapped
-    if (approvedOvertimes.length > 0) {
+    // 8. Mark newly-included overtimes as recapped (already-recapped ones
+    // from a prior run are left untouched)
+    if (newlyApprovedOvertimes.length > 0) {
       await prisma.overtimeRequest.updateMany({
         where: {
-          id: { in: approvedOvertimes.map((ot) => ot.id) },
+          id: { in: newlyApprovedOvertimes.map((ot) => ot.id) },
         },
         data: {
           isRecapped: true,
