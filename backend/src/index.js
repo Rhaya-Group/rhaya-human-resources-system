@@ -39,6 +39,7 @@ import questionRoutes from "./routes/question.routes.js";
 import positionOverseerRoutes from "./routes/positionOverseer.routes.js";
 import recruitmentDocumentRoutes from "./routes/recruitmentDocument.routes.js";
 import cvUploadRoutes from "./routes/cvUpload.routes.js";
+import hrApplicantRoutes from "./routes/hrApplicant.routes.js";
 
 // Import middleware
 import { authenticateToken, authenticate, authorizeHR } from "./middleware/auth.js";
@@ -221,6 +222,8 @@ app.use("/api/recruitment/questions", authenticate, authorizeHR, questionRoutes)
 app.use("/api/recruitment/postings", authenticate, authorizeHR, positionOverseerRoutes);
 // HR: document management
 app.use("/api/recruitment/documents", authenticate, authorizeHR, recruitmentDocumentRoutes);
+// HR: global candidate pool (Applicant has no entity scope).
+app.use("/api/hr/applicants", authenticate, authorizeHR, hrApplicantRoutes);
 // Candidate: CV upload + document submission
 app.use("/api/recruitment/my/cv", applicantAuthenticate, cvUploadRoutes);
 

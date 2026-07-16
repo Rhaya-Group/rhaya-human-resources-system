@@ -43,6 +43,7 @@ import QuestionBank from "./pages/recruitment/QuestionBank";
 import QuestionAssignment from "./pages/recruitment/QuestionAssignment";
 import JobPostings from "./pages/recruitment/JobPostings";
 import Pipeline from "./pages/recruitment/Pipeline";
+import CandidatePool from "./pages/recruitment/CandidatePool";
 
 // Layout
 import Layout from "./components/Layout";
@@ -365,6 +366,14 @@ function App() {
             element={
               <ProtectedRoute allowedLevels={[1, 2]}>
                 <QuestionBank />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recruitment/candidates"
+            element={
+              <ProtectedRoute allowedLevels={[1, 2]}>
+                <CandidatePool />
               </ProtectedRoute>
             }
           />
