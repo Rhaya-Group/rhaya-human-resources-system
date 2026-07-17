@@ -195,14 +195,36 @@ async function loadScopedApplication(applicationId, user) {
   const application = await prisma.jobApplication.findUnique({
     where: { id: applicationId },
     include: {
-      applicant: { select: { id: true, name: true, email: true, phone: true, resumeUrl: true } },
+      applicant: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          resumeUrl: true,
+          cvFileUrl: true,
+          parsedCv: true,
+        },
+      },
       jobPosting: { select: { id: true, title: true, plottingCompanyId: true } },
       events: { orderBy: { createdAt: "desc" } },
+      answers: { include: { question: true } },
+      documents: { orderBy: { createdAt: "desc" } },
     },
   });
   if (!application) return { error: 404 };
   const allowed = await canAccessEntity(user, application.jobPosting.plottingCompanyId);
   if (!allowed) return { error: 403 };
+
+  const positionQuestions = await prisma.positionQuestion.findMany({
+    where: { jobPostingId: application.jobPostingId },
+    select: { questionId: true, order: true },
+  });
+  const orderByQuestionId = new Map(positionQuestions.map((row) => [row.questionId, row.order]));
+  application.answers.sort((a, b) =>
+    (orderByQuestionId.get(a.questionId) ?? 9999) - (orderByQuestionId.get(b.questionId) ?? 9999)
+  );
+
   return { application };
 }
 

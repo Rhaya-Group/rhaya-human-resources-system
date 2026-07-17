@@ -4,6 +4,13 @@
 // - DELETE /api/recruitment/documents/:id
 // TODO: implement
 
+import RecruitmentDocumentList from "./RecruitmentDocumentList.jsx";
+
 export default function DocumentManagement() {
-  return <div>Document management — to be implemented (Epic C9)</div>;
+  return (
+    <div className="p-6">
+      <h1 className="text-2xl font-bold text-gray-900 mb-4">Document Management</h1>
+      <RecruitmentDocumentList documents={[]} />
+    </div>
+  );
 }

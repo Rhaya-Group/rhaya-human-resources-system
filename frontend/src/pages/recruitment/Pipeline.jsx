@@ -3,6 +3,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, Link } from "react-router-dom";
 import apiClient from "../../api/client";
 import { STAGES, STAGE_LABELS, StageBadge } from "../../utils/stages.jsx";
+import RecruitmentDocumentList from "./RecruitmentDocumentList.jsx";
+
+function answerText(value) {
+  if (Array.isArray(value)) return value.join(", ");
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return value ?? "Not answered";
+}
 
 export default function Pipeline() {
   const { id } = useParams();
@@ -101,7 +108,7 @@ function ApplicantDrawer({ applicationId, onClose, onChanged }) {
   }
 
   async function addNote() {
-    if (!note) return;
+  if (!note) return;
     setBusy(true);
     try {
       await apiClient.post(`/recruitment/applications/${applicationId}/notes`, { note });
@@ -109,6 +116,10 @@ function ApplicantDrawer({ applicationId, onClose, onChanged }) {
       refresh();
     } finally { setBusy(false); }
   }
+
+  const inboundDocs = app?.documents?.filter((doc) => doc.direction === "inbound") || [];
+  const outboundDocs = app?.documents?.filter((doc) => doc.direction === "outbound") || [];
+  const resumeUrl = app?.resumeUrl || app?.applicant?.cvFileUrl || app?.applicant?.resumeUrl;
 
   return (
     <div className="fixed inset-0 bg-black/30 flex justify-end z-50" onClick={onClose}>
@@ -122,15 +133,44 @@ function ApplicantDrawer({ applicationId, onClose, onChanged }) {
           <>
             <div className="text-sm text-gray-600 space-y-1 mb-4">
               <p>{app.applicant?.email}{app.applicant?.phone ? ` · ${app.applicant.phone}` : ""}</p>
-              <p>Current: <StageBadge stage={app.stage} /></p>
-              {app.resumeUrl && (
-                <a href={app.resumeUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
+              <p className="flex items-center gap-2">
+                Current: <StageBadge stage={app.stage} />
+                {app.knockoutFlagged && (
+                  <span className="bg-amber-100 text-amber-800 text-xs font-semibold px-2 py-0.5 rounded">
+                    Knockout flagged
+                  </span>
+                )}
+              </p>
+              {resumeUrl && (
+                <a href={resumeUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
                   View resume
                 </a>
               )}
               {app.coverLetter && (
                 <p className="whitespace-pre-wrap text-gray-700 mt-2 border-l-2 border-gray-200 pl-2">{app.coverLetter}</p>
               )}
+            </div>
+
+            <div className="border-t border-gray-200 pt-4 space-y-2">
+              <h3 className="text-xs font-semibold text-gray-600">Screening Answers</h3>
+              {app.answers?.length ? (
+                <div className="space-y-2">
+                  {app.answers.map((answer) => (
+                    <div key={answer.id} className="text-sm">
+                      <p className="font-semibold text-gray-800">{answer.question?.text}</p>
+                      <p className="text-gray-600">{answerText(answer.value)}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400">No screening answers.</p>
+              )}
+            </div>
+
+            <div className="border-t border-gray-200 pt-4 space-y-3">
+              <h3 className="text-xs font-semibold text-gray-600">Documents</h3>
+              <RecruitmentDocumentList title="Issued by HR" documents={outboundDocs} />
+              <RecruitmentDocumentList title="Submitted by candidate" documents={inboundDocs} />
             </div>
 
             <div className="border-t border-gray-200 pt-4 space-y-2">
