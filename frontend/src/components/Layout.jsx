@@ -497,6 +497,7 @@ export default function Layout({ children }) {
       toggle: () => setIsRecruitmentOpen(!isRecruitmentOpen),
       children: [
         { path: "/recruitment/candidates", label: "Candidate Pool" },
+        { path: "/recruitment/documents", label: "Documents" },
         { path: "/recruitment/jobs", label: "Job Postings" },
         { path: "/recruitment/questions", label: "Question Bank" },
       ],

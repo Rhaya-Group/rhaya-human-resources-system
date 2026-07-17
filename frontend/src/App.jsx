@@ -44,6 +44,7 @@ import QuestionAssignment from "./pages/recruitment/QuestionAssignment";
 import JobPostings from "./pages/recruitment/JobPostings";
 import Pipeline from "./pages/recruitment/Pipeline";
 import CandidatePool from "./pages/recruitment/CandidatePool";
+import DocumentManagement from "./pages/recruitment/DocumentManagement";
 
 // Layout
 import Layout from "./components/Layout";
@@ -374,6 +375,14 @@ function App() {
             element={
               <ProtectedRoute allowedLevels={[1, 2]}>
                 <CandidatePool />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recruitment/documents"
+            element={
+              <ProtectedRoute allowedLevels={[1, 2]}>
+                <DocumentManagement />
               </ProtectedRoute>
             }
           />

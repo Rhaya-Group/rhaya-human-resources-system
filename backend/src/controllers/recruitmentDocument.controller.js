@@ -6,33 +6,51 @@ const prisma = new PrismaClient();
 // ── HR: issue outbound document ───────────────────────────────────────────────
 
 export const issueDocument = async (req, res) => {
-  const { applicationId, jobPostingId, stage, kind, title, linkUrl } = req.body;
+  try {
+    const { applicationId, jobPostingId, stage, kind, title, linkUrl } = req.body;
 
-  let fileUrl = null;
-  if (kind === "file") {
-    if (!req.file) return res.status(400).json({ error: "File required for kind=file" });
-    fileUrl = await uploadToR2(req.file, "recruitment/documents");
-  } else if (kind === "link") {
-    if (!linkUrl) return res.status(400).json({ error: "linkUrl required for kind=link" });
-  } else {
-    return res.status(400).json({ error: "kind must be file or link" });
+    if (!applicationId && !jobPostingId) {
+      return res.status(400).json({ error: "applicationId or jobPostingId required" });
+    }
+
+    if (applicationId) {
+      const application = await prisma.jobApplication.findUnique({ where: { id: applicationId }, select: { id: true } });
+      if (!application) return res.status(404).json({ error: "Application not found" });
+    }
+
+    if (jobPostingId) {
+      const posting = await prisma.jobPosting.findUnique({ where: { id: jobPostingId }, select: { id: true } });
+      if (!posting) return res.status(404).json({ error: "Job posting not found" });
+    }
+
+    let fileUrl = null;
+    if (kind === "file") {
+      if (!req.file) return res.status(400).json({ error: "File required for kind=file" });
+      fileUrl = await uploadToR2(req.file, "recruitment/documents");
+    } else if (kind === "link") {
+      if (!linkUrl) return res.status(400).json({ error: "linkUrl required for kind=link" });
+    } else {
+      return res.status(400).json({ error: "kind must be file or link" });
+    }
+
+    const doc = await prisma.recruitmentDocument.create({
+      data: {
+        applicationId,
+        jobPostingId,
+        stage,
+        direction: "outbound",
+        kind,
+        title,
+        fileUrl,
+        linkUrl,
+        uploadedBy: req.user.id,
+      },
+    });
+
+    res.status(201).json(doc);
+  } catch (error) {
+    res.status(error.statusCode || error.status || 500).json({ error: error.message || "Failed to issue document" });
   }
-
-  const doc = await prisma.recruitmentDocument.create({
-    data: {
-      applicationId,
-      jobPostingId,
-      stage,
-      direction: "outbound",
-      kind,
-      title,
-      fileUrl,
-      linkUrl,
-      uploadedBy: req.user.id,
-    },
-  });
-
-  res.status(201).json(doc);
 };
 
 // ── HR: list documents for an application or posting ─────────────────────────
