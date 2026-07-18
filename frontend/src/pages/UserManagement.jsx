@@ -7,6 +7,7 @@ import Select from "react-select";
 import EntitySelector from "../components/EntitySelector";
 import EntityGroupSelector from "../components/EntityGroupSelector";
 import ContractExpirationWidget from "../components/ContractExpirationWidget";
+import AnnouncementBoard from "../components/AnnouncementBoard";
 
 export default function UserManagement() {
   const { user, loading } = useAuth();
@@ -1016,6 +1017,8 @@ export default function UserManagement() {
           Create User
         </button>
       </div>
+
+      <AnnouncementBoard className="mb-6" />
 
       <ContractExpirationWidget />
 

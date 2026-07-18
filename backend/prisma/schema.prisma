@@ -44,6 +44,7 @@ model User {
   EmployeeDocument_EmployeeDocument_uploadedByIdTousers EmployeeDocument[]     @relation("EmployeeDocument_uploadedByIdTousers")
   EmployeeDocument_EmployeeDocument_userIdTousers       EmployeeDocument[]     @relation("EmployeeDocument_userIdTousers")
   emergencyContacts                                     EmergencyContact[]
+  announcements                                         Announcement[]
   leaveBalances                                         LeaveBalance[]
   leaveApprovals                                        LeaveRequest[]         @relation("LeaveCurrentApprover")
   divisionHeadLeaves                                    LeaveRequest[]         @relation("LeaveDivisionHead")
@@ -662,6 +663,31 @@ model EmergencyContact {
 
   @@index([userId])
   @@map("emergency_contacts")
+}
+
+model Announcement {
+  id                 String    @id @default(cuid())
+  title              String
+  body               String
+  isPinned           Boolean   @default(false)
+  expiresAt          DateTime?
+  // Empty array on any of these = no restriction on that dimension.
+  // A user sees the announcement only if they match every non-empty dimension.
+  targetAccessLevels Int[]     @default([])
+  targetEntityIds    String[]  @default([])
+  targetGroupIds     String[]  @default([])
+  targetSubgroupIds  String[]  @default([])
+  targetDivisionIds  String[]  @default([])
+  createdById        String
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  createdBy          User      @relation(fields: [createdById], references: [id])
+
+  @@index([createdById])
+  @@index([expiresAt])
+  @@index([isPinned])
+  @@map("announcements")
 }
 
 model Offboarding {
