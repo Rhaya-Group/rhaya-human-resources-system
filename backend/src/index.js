@@ -18,6 +18,7 @@ import welcomeEmailRoutes from "./routes/welcomeEmail.routes.js";
 import plottingCompanyRoutes from "./routes/plottingCompany.routes.js";
 import documentRoutes from "./routes/document.routes.js";
 import emergencyContactRoutes from "./routes/emergencyContact.routes.js";
+import announcementRoutes from "./routes/announcement.routes.js";
 import internalRoutes from "./routes/internal.routes.js";
 import offboardingRoutes from "./routes/offboarding.routes.js";
 import entityGroupRoutes from "./routes/entityGroup.routes.js";
@@ -39,6 +40,7 @@ import questionRoutes from "./routes/question.routes.js";
 import positionOverseerRoutes from "./routes/positionOverseer.routes.js";
 import recruitmentDocumentRoutes from "./routes/recruitmentDocument.routes.js";
 import cvUploadRoutes from "./routes/cvUpload.routes.js";
+import hrApplicantRoutes from "./routes/hrApplicant.routes.js";
 
 // Import middleware
 import { authenticateToken, authenticate, authorizeHR } from "./middleware/auth.js";
@@ -187,6 +189,7 @@ app.use("/api/payslips", payslipRoutes);
 app.use("/api/plotting-companies", plottingCompanyRoutes);
 app.use("/api/users/:userId/documents", documentRoutes);
 app.use("/api/users/:userId/emergency-contacts", emergencyContactRoutes);
+app.use("/api/announcements", announcementRoutes);
 app.use("/api/admin/leave-reminder", leaveReminderTestRoutes);
 app.use("/api/admin/contract-reminder", contractReminderTestRoutes);
 
@@ -221,6 +224,8 @@ app.use("/api/recruitment/questions", authenticate, authorizeHR, questionRoutes)
 app.use("/api/recruitment/postings", authenticate, authorizeHR, positionOverseerRoutes);
 // HR: document management
 app.use("/api/recruitment/documents", authenticate, authorizeHR, recruitmentDocumentRoutes);
+// HR: global candidate pool (Applicant has no entity scope).
+app.use("/api/hr/applicants", authenticate, authorizeHR, hrApplicantRoutes);
 // Candidate: CV upload + document submission
 app.use("/api/recruitment/my/cv", applicantAuthenticate, cvUploadRoutes);
 

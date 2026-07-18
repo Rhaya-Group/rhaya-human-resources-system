@@ -37,12 +37,15 @@ import WorkStatusDashboard from "./pages/WorkStatusDashboard";
 import AttendancePermissions from "./pages/AttendancePermissions";
 import WfhScheduler from "./pages/WfhScheduler";
 import WfhAdmin from "./pages/WfhAdmin";
+import AnnouncementManagement from "./pages/AnnouncementManagement";
 
 // Recruitment
 import QuestionBank from "./pages/recruitment/QuestionBank";
 import QuestionAssignment from "./pages/recruitment/QuestionAssignment";
 import JobPostings from "./pages/recruitment/JobPostings";
 import Pipeline from "./pages/recruitment/Pipeline";
+import CandidatePool from "./pages/recruitment/CandidatePool";
+import DocumentManagement from "./pages/recruitment/DocumentManagement";
 
 // Layout
 import Layout from "./components/Layout";
@@ -359,12 +362,37 @@ function App() {
             }
           />
 
+          <Route
+            path="/announcements/manage"
+            element={
+              <ProtectedRoute allowedLevels={[1, 2]}>
+                <AnnouncementManagement />
+              </ProtectedRoute>
+            }
+          />
+
           {/* Recruitment */}
           <Route
             path="/recruitment/questions"
             element={
               <ProtectedRoute allowedLevels={[1, 2]}>
                 <QuestionBank />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recruitment/candidates"
+            element={
+              <ProtectedRoute allowedLevels={[1, 2]}>
+                <CandidatePool />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recruitment/documents"
+            element={
+              <ProtectedRoute allowedLevels={[1, 2]}>
+                <DocumentManagement />
               </ProtectedRoute>
             }
           />

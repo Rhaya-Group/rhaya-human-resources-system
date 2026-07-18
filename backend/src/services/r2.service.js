@@ -33,6 +33,7 @@ export function validateUpload(file) {
 
 export async function uploadToR2(file, folder = "recruitment") {
   validateUpload(file);
+  if (!PUBLIC_URL) throw Object.assign(new Error("R2_PUBLIC_URL is not configured"), { statusCode: 500 });
   const ext = path.extname(file.originalname);
   const key = `${folder}/${uuid()}${ext}`;
 
