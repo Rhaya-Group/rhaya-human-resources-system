@@ -37,6 +37,7 @@ import WorkStatusDashboard from "./pages/WorkStatusDashboard";
 import AttendancePermissions from "./pages/AttendancePermissions";
 import WfhScheduler from "./pages/WfhScheduler";
 import WfhAdmin from "./pages/WfhAdmin";
+import AnnouncementManagement from "./pages/AnnouncementManagement";
 
 // Recruitment
 import QuestionBank from "./pages/recruitment/QuestionBank";
@@ -357,6 +358,15 @@ function App() {
             element={
               <ProtectedRoute allowedLevels={[1, 2]}>
                 <WfhAdmin />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/announcements/manage"
+            element={
+              <ProtectedRoute allowedLevels={[1, 2]}>
+                <AnnouncementManagement />
               </ProtectedRoute>
             }
           />

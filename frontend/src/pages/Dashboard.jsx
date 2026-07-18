@@ -6,6 +6,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { getMyOvertimeBalance, getMyOvertimeRequests, getMyLeaveBalance } from '../api/client';
+import AnnouncementBoard from '../components/AnnouncementBoard';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -133,6 +134,8 @@ export default function Dashboard() {
           {t('dashboard.welcomeBack', { name: user?.name?.split(' ')[0] })} 👋
         </h1>
       </header>
+
+      <AnnouncementBoard />
 
       {/* 2x2 Grid on Mobile, 4 columns on Desktop */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
