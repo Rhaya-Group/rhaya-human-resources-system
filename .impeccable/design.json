@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-15T00:00:00.000Z",
+  "title": "Design System: Rhaya People Management Center",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Ledger Blue",
+        "canonical": "oklch(54% 0.20 259)",
+        "tonalRamp": [
+          "#1e3a8a",
+          "#1e40af",
+          "#1d4ed8",
+          "#2563eb",
+          "#3b82f6",
+          "#60a5fa",
+          "#93c5fd",
+          "#dbeafe"
+        ]
+      },
+      "neutral-bg": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "oklch(98% 0.002 247)",
+        "tonalRamp": [
+          "#111827",
+          "#1f2937",
+          "#374151",
+          "#6b7280",
+          "#9ca3af",
+          "#d1d5db",
+          "#e5e7eb",
+          "#f9fafb"
+        ]
+      },
+      "success": {
+        "role": "semantic",
+        "displayName": "Approved Green",
+        "canonical": "oklch(70% 0.15 165)",
+        "tonalRamp": ["#065f46", "#047857", "#059669", "#10b981", "#34d399", "#6ee7b7", "#a7f3d0", "#d1fae5"]
+      },
+      "warning": {
+        "role": "semantic",
+        "displayName": "Pending Amber",
+        "canonical": "oklch(76% 0.16 70)",
+        "tonalRamp": ["#92400e", "#b45309", "#d97706", "#f59e0b", "#fbbf24", "#fcd34d", "#fde68a", "#fef3c7"]
+      },
+      "danger": {
+        "role": "semantic",
+        "displayName": "Rejected Red",
+        "canonical": "oklch(63% 0.21 25)",
+        "tonalRamp": ["#991b1b", "#b91c1c", "#dc2626", "#ef4444", "#f87171", "#fca5a5", "#fecaca", "#fee2e2"]
+      }
+    },
+    "typographyMeta": {
+      "heading": { "displayName": "Heading", "purpose": "Page-level titles (User Management, Leave History)." },
+      "section-heading": { "displayName": "Section Heading", "purpose": "Card and panel titles within a page." },
+      "body": { "displayName": "Body / UI", "purpose": "Default size for table cells, labels, buttons, prose." },
+      "label": { "displayName": "Label", "purpose": "Field labels and metadata." }
+    },
+    "shadows": [
+      { "name": "card-legacy", "value": "0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06)", "purpose": "Default card separation on most existing pages (Tailwind 'shadow')." },
+      { "name": "card-quiet", "value": "0 8px 30px rgb(0 0 0 / 0.04)", "purpose": "Preferred going-forward card treatment (Profile page SectionCard), paired with rounded-3xl and a gray-100 hairline border." },
+      { "name": "modal", "value": "0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1)", "purpose": "Upload/edit/confirm dialogs, above page-level cards." },
+      { "name": "mobile-drawer", "value": "0 25px 50px -12px rgba(0,0,0,0.25)", "purpose": "Slide-in sidebar on small screens." }
+    ],
+    "motion": [
+      { "name": "fade-in", "value": "0.2s ease-out", "purpose": "Modal/dropdown entrance (scale 0.95->1, translateY -10px->0)." },
+      { "name": "fade-out", "value": "0.15s ease-in", "purpose": "Modal/dropdown exit." },
+      { "name": "transition-colors", "value": "150ms ease", "purpose": "Hover states on buttons and nav items." }
+    ],
+    "breakpoints": [
+      { "name": "lg", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Default action button — submit forms, confirm dialogs, primary CTAs.",
+      "html": "<button class=\"ds-btn-primary\">Save Changes</button>",
+      "css": ".ds-btn-primary { background: #2563eb; color: #fff; padding: 8px 16px; border-radius: 8px; font-size: 0.875rem; font-weight: 500; border: none; cursor: pointer; transition: background-color 150ms ease; } .ds-btn-primary:hover { background: #1d4ed8; } .ds-btn-primary:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; } .ds-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Cancel / dismiss action, used in every modal.",
+      "html": "<button class=\"ds-btn-secondary\">Cancel</button>",
+      "css": ".ds-btn-secondary { background: #fff; color: #374151; padding: 8px 16px; border-radius: 8px; font-size: 0.875rem; font-weight: 500; border: 1px solid #d1d5db; cursor: pointer; transition: background-color 150ms ease; } .ds-btn-secondary:hover { background: #f9fafb; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "The system's single text/select/date field style, used 190+ times across the codebase.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Enter value\" />",
+      "css": ".ds-input { width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 0.875rem; color: #111827; background: #fff; } .ds-input:focus { outline: none; box-shadow: 0 0 0 2px #3b82f6; border-color: transparent; } .ds-input:disabled { background: #f9fafb; color: #9ca3af; cursor: not-allowed; }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "badge-success",
+      "description": "The system's signature component: two-tone pill for status, document type, employee status, access level. Swap the color pair per status; keep the 100/800 tint-and-ink structure.",
+      "html": "<span class=\"ds-badge ds-badge--success\">Approved</span>",
+      "css": ".ds-badge { display: inline-block; padding: 2px 8px; font-size: 0.75rem; font-weight: 500; border-radius: 9999px; } .ds-badge--success { background: #d1fae5; color: #065f46; } .ds-badge--warning { background: #fef3c7; color: #92400e; } .ds-badge--danger { background: #fee2e2; color: #991b1b; } .ds-badge--info { background: #dbeafe; color: #1e40af; }"
+    },
+    {
+      "name": "Card (quiet, preferred)",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The newer SectionCard idiom from the Profile page — the preferred pattern for new pages going forward.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card__header\"><span class=\"ds-card__title\">Personal Information</span></div><div class=\"ds-card__body\">Card content goes here.</div></div>",
+      "css": ".ds-card { background: #fff; border: 1px solid #f3f4f6; border-radius: 24px; box-shadow: 0 8px 30px rgb(0 0 0 / 0.04); overflow: hidden; } .ds-card__header { padding: 16px 24px; border-bottom: 1px solid #f9fafb; } .ds-card__title { font-size: 0.75rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; color: #9ca3af; } .ds-card__body { padding: 24px; }"
+    },
+    {
+      "name": "Card (legacy)",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The flat-shadow card idiom used across the majority of existing pages.",
+      "html": "<div class=\"ds-card-legacy\"><h3 class=\"ds-card-legacy__title\">Section Title</h3><div>Card content goes here.</div></div>",
+      "css": ".ds-card-legacy { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06); padding: 24px; } .ds-card-legacy__title { font-size: 1.125rem; font-weight: 600; color: #111827; margin-bottom: 16px; }"
+    },
+    {
+      "name": "Sidebar Nav Item",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "Primary sidebar navigation link, active/inactive states.",
+      "html": "<a class=\"ds-nav-item ds-nav-item--active\" href=\"#\">Dashboard</a>",
+      "css": ".ds-nav-item { display: block; padding: 8px 12px; border-radius: 8px; font-size: 0.875rem; font-weight: 500; color: #374151; text-decoration: none; transition: background-color 150ms ease, color 150ms ease; } .ds-nav-item:hover { background: #f9fafb; } .ds-nav-item--active { background: #eff6ff; color: #2563eb; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Ledger",
+    "overview": "Every screen in this system exists because a number, a date, or an approval needs to be accountable to someone. The Ledger names that: precision over persuasion, traceability over decoration. A leave balance, an overtime total, a contract end date — each one should read as a fact with a visible source, not a styled statistic. The system currently runs on a single, consistent primary blue applied more heavily than a strict Restrained strategy prescribes, but consistently enough to read as intentional. A colorize pass is the identified next step to correct accent coverage, not the palette's hue itself.",
+    "keyCharacteristics": [
+      "One accent color (blue), applied to buttons, active states, links, and a handful of badges",
+      "Two coexisting card idioms: legacy rounded-lg/shadow, and a newer quieter rounded-3xl idiom on the Profile page",
+      "Dense, form-heavy, table-heavy — built for repeated daily use, not first impressions",
+      "No custom typeface — the system sans carries every weight and size",
+      "Status conveyed almost entirely through pill-shaped, two-tone badges"
+    ],
+    "rules": [
+      { "name": "The One Blue Rule", "body": "There is exactly one accent hue in the system. Don't introduce a second brand color for variety; a second signal color comes from the semantic set (success/warning/danger), never a new arbitrary hue.", "section": "colors" },
+      { "name": "The One Family Rule", "body": "Every size and weight comes from the same sans stack. A second typeface anywhere is an unforced addition.", "section": "typography" },
+      { "name": "The Pick-One Rule", "body": "New pages should adopt the quiet SectionCard idiom (rounded-3xl, hairline border, near-invisible shadow) going forward rather than the legacy flat-shadow card.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do use the exact input class for every new text/select/date field",
+      "Do use the {color}-100 bg / {color}-800 text badge structure for any new status or type indicator",
+      "Do prefer the quiet SectionCard idiom for new pages",
+      "Do keep confirmations as native confirm() or an explicit modal step before any destructive or high-stakes action",
+      "Do make entity/scope boundaries visible in the UI, not just enforced silently server-side"
+    ],
+    "donts": [
+      "Don't introduce a second accent hue for variety",
+      "Don't add a display or serif font anywhere",
+      "Don't use border-left/border-right colored stripes as a status indicator",
+      "Don't use gradient text or glassmorphism anywhere in the authenticated app shell",
+      "Don't add decorative motion",
+      "Don't silently pick between the two card idioms per-screen"
+    ]
+  }
+}

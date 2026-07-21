@@ -6,9 +6,10 @@ import ExcelJS from 'exceljs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import htmlPdf from 'html-pdf-node';
-import { uploadPayslip } from '../config/storage.js';
+import { uploadPayslip, getFileFromR2 } from '../config/storage.js';
 import { encryptPayslipPDF } from '../utils/pdfEncryption.js';
 import { sendPayslipNotificationEmail } from '../services/email.service.js';
+import { getEntityPolicy } from '../helpers/policyResolver.js';
 import prisma from '../config/database.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -396,19 +397,45 @@ async function excelRangeToHtml(sheet, range) {
 }
 
 /**
+ * Insert the entity's payslip logo (from its resolved policy) into the
+ * header region (B2:D3). Falls back silently to whatever's already baked
+ * into the template file — a broken/missing logo must never break payslip
+ * generation.
+ */
+async function insertPayslipLogo(workbook, sheet, plottingCompanyId) {
+  try {
+    const policy = await getEntityPolicy(plottingCompanyId);
+    if (!policy.payslipLogoUrl) return;
+
+    const buffer = await getFileFromR2(policy.payslipLogoUrl);
+    const extension = policy.payslipLogoUrl.toLowerCase().endsWith('.png') ? 'png' : 'jpeg';
+
+    const imageId = workbook.addImage({ buffer, extension });
+    sheet.addImage(imageId, {
+      tl: { col: 1, row: 1 }, // top-left of B2
+      ext: { width: 160, height: 60 },
+      editAs: 'oneCell',
+    });
+  } catch (err) {
+    console.error('[Payslip] Failed to insert custom logo, using template default:', err.message);
+  }
+}
+
+/**
  * Fill template with employee data and convert to PDF
  */
 export const fillTemplateAndConvertToPDF = async (employeeData, payrollData, period, plottingCompany) => {
   // Load template
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(TEMPLATE_PATH);
-  
+
   const sheet = workbook.getWorksheet('Payslip');
   if (!sheet) {
     throw new Error('Template sheet "Payslip" not found');
   }
 
-  
+  await insertPayslipLogo(workbook, sheet, plottingCompany?.id);
+
   // ── Populate cells ─────────────────────────────────────────────────────────
   sheet.mergeCells('B2:D2');
   sheet.mergeCells('B3:D3');

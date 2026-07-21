@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import {
   Shield, Plus, Edit2, Trash2, ChevronDown, ChevronUp,
-  Link, Tag, Building2, Users, X, Info, Mail, Server,
+  Link, Tag, Building2, Users, X, Info, Mail, Server, Image, Upload,
 } from 'lucide-react';
 import apiClient from '../api/client';
 
@@ -391,6 +391,62 @@ function TemplateModal({ editing, onClose, onSaved }) {
     : { ...BLANK_TEMPLATE }
   );
   const [saving, setSaving] = useState(false);
+  const [logoUrl, setLogoUrl] = useState(null);
+  const [logoLoading, setLogoLoading] = useState(!!editing);
+  const [logoUploading, setLogoUploading] = useState(false);
+
+  useEffect(() => {
+    if (!editing) return;
+    let cancelled = false;
+    apiClient.get(`/policy-templates/${editing.id}/logo`)
+      .then(res => { if (!cancelled) setLogoUrl(res.data.data?.url || null); })
+      .catch(() => { if (!cancelled) setLogoUrl(null); })
+      .finally(() => { if (!cancelled) setLogoLoading(false); });
+    return () => { cancelled = true; };
+  }, [editing]);
+
+  async function handleLogoUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/jpg'].includes(file.type)) {
+      alert('Logo must be PNG or JPEG');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Logo must be under 2MB');
+      e.target.value = '';
+      return;
+    }
+    try {
+      setLogoUploading(true);
+      const formData = new FormData();
+      formData.append('file', file);
+      await apiClient.post(`/policy-templates/${editing.id}/logo`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const res = await apiClient.get(`/policy-templates/${editing.id}/logo`);
+      setLogoUrl(res.data.data?.url || null);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to upload logo');
+    } finally {
+      setLogoUploading(false);
+      e.target.value = '';
+    }
+  }
+
+  async function handleLogoRemove() {
+    if (!confirm('Remove this template\'s payslip logo? Payslips will fall back to the default logo.')) return;
+    try {
+      setLogoUploading(true);
+      await apiClient.delete(`/policy-templates/${editing.id}/logo`);
+      setLogoUrl(null);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to remove logo');
+    } finally {
+      setLogoUploading(false);
+    }
+  }
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const toggleApprover = (field, val) => setForm(f => ({
@@ -589,6 +645,44 @@ function TemplateModal({ editing, onClose, onSaved }) {
                 placeholder="https://drive.google.com/..."
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
               <p className="text-xs text-gray-400 mt-1">Shown in sidebar for employees under this template.</p>
+            </div>
+
+            <hr />
+
+            {/* Payslip Logo */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <Image className="w-4 h-4 text-indigo-500" />
+                Payslip Logo
+              </h3>
+              {!editing ? (
+                <p className="text-xs text-gray-400">Save the template first, then come back to upload a logo.</p>
+              ) : logoLoading ? (
+                <p className="text-xs text-gray-400">Loading...</p>
+              ) : (
+                <div className="flex items-center gap-3">
+                  {logoUrl ? (
+                    <img src={logoUrl} alt="Payslip logo" className="h-12 w-auto max-w-[160px] object-contain border border-gray-200 rounded-lg p-1 bg-white" />
+                  ) : (
+                    <div className="h-12 w-24 flex items-center justify-center border border-dashed border-gray-300 rounded-lg text-xs text-gray-400">
+                      No logo
+                    </div>
+                  )}
+                  <label className="px-3 py-2 border border-gray-300 rounded-lg text-sm cursor-pointer hover:bg-gray-50 flex items-center gap-1.5">
+                    <Upload className="w-3.5 h-3.5" />
+                    {logoUploading ? 'Uploading...' : logoUrl ? 'Replace' : 'Upload'}
+                    <input type="file" accept="image/png,image/jpeg" className="hidden"
+                      onChange={handleLogoUpload} disabled={logoUploading} />
+                  </label>
+                  {logoUrl && (
+                    <button type="button" onClick={handleLogoRemove} disabled={logoUploading}
+                      className="text-red-500 hover:text-red-700 text-sm">
+                      Remove
+                    </button>
+                  )}
+                </div>
+              )}
+              <p className="text-xs text-gray-400 mt-1">PNG or JPEG, under 2MB. Falls back to the default logo if not set. Used on payslips for entities under this template.</p>
             </div>
 
             <hr />
