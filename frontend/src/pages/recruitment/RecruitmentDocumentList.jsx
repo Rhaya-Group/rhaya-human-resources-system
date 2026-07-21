@@ -1,5 +1,6 @@
 import { useState } from "react";
 import DocumentPreviewModal from "../../components/DocumentPreviewModal.jsx";
+import apiClient from "../../api/client";
 
 function normalizeUrl(url) {
   if (!url) return "";
@@ -13,6 +14,27 @@ function isPdf(url) {
 
 export default function RecruitmentDocumentList({ title, documents = [], onDelete }) {
   const [preview, setPreview] = useState(null);
+  const [loadingId, setLoadingId] = useState(null);
+
+  async function view(doc) {
+    setLoadingId(doc.id);
+    try {
+      const res = await apiClient.get(`/recruitment/documents/${doc.id}/view`, { responseType: "blob" });
+      const href = URL.createObjectURL(res.data);
+      setPreview({
+        title: doc.title,
+        href,
+        mimeType: res.headers["content-type"] || "application/pdf",
+      });
+    } finally {
+      setLoadingId(null);
+    }
+  }
+
+  function closePreview() {
+    if (preview?.href?.startsWith("blob:")) URL.revokeObjectURL(preview.href);
+    setPreview(null);
+  }
 
   return (
     <div>
@@ -33,10 +55,10 @@ export default function RecruitmentDocumentList({ title, documents = [], onDelet
                   {href && isPdf(href) && (
                     <button
                       type="button"
-                      onClick={() => setPreview({ title: doc.title, href })}
+                      onClick={() => view(doc)}
                       className="text-blue-600 hover:underline"
                     >
-                      View
+                      {loadingId === doc.id ? "Loading..." : "View"}
                     </button>
                   )}
                   {href && (
@@ -58,9 +80,9 @@ export default function RecruitmentDocumentList({ title, documents = [], onDelet
       {preview && (
         <DocumentPreviewModal
           fileName={preview.title}
-          mimeType="application/pdf"
+          mimeType={preview.mimeType}
           previewUrl={preview.href}
-          onClose={() => setPreview(null)}
+          onClose={closePreview}
         />
       )}
     </div>

@@ -6,6 +6,7 @@
 import prisma from "../config/database.js";
 import { canAccessEntity } from "./jobPosting.controller.js";
 import { ruleMatches } from "../utils/recruitmentKnockout.js";
+import { publicFileUrl, getFileFromR2 } from "../services/r2.service.js";
 
 const STAGES = [
   "applied",
@@ -116,7 +117,7 @@ export const apply = async (req, res) => {
           stage,
           knockoutFlagged: softFlagged,
           coverLetter: coverLetter || null,
-          resumeUrl: resumeUrl || req.applicant.resumeUrl || null,
+          resumeUrl: resumeUrl || publicFileUrl(req.applicant.cvFileUrl) || null,
           rejectedReason: hardRejected ? "Screening knockout" : null,
           events: {
             create: {
@@ -224,6 +225,10 @@ async function loadScopedApplication(applicationId, user) {
   application.answers.sort((a, b) =>
     (orderByQuestionId.get(a.questionId) ?? 9999) - (orderByQuestionId.get(b.questionId) ?? 9999)
   );
+  application.applicant.cvFileUrl = publicFileUrl(application.applicant.cvFileUrl);
+  application.applicant.resumeUrl = publicFileUrl(application.applicant.resumeUrl);
+  application.resumeUrl = publicFileUrl(application.resumeUrl);
+  application.documents = application.documents.map((doc) => ({ ...doc, fileUrl: publicFileUrl(doc.fileUrl) }));
 
   return { application };
 }
@@ -272,6 +277,22 @@ export const getForHr = async (req, res) => {
   } catch (error) {
     console.error("Get application (HR) error:", error);
     return res.status(500).json({ error: "Failed to fetch application" });
+  }
+};
+
+export const viewResumeForHr = async (req, res) => {
+  try {
+    const { application, error } = await loadScopedApplication(req.params.id, req.user);
+    if (error === 404) return res.status(404).json({ error: "Application not found" });
+    if (error === 403) return res.status(403).json({ error: "Access denied for this entity" });
+    const fileUrl = application.resumeUrl || application.applicant?.cvFileUrl || application.applicant?.resumeUrl;
+    if (!fileUrl) return res.status(404).json({ error: "Resume not found" });
+    const file = await getFileFromR2(fileUrl);
+    res.setHeader("Content-Type", file.ContentType || "application/pdf");
+    res.setHeader("Content-Disposition", 'inline; filename="resume"');
+    file.Body.pipe(res);
+  } catch (error) {
+    res.status(error.statusCode || error.status || 500).json({ error: error.message || "Failed to open resume" });
   }
 };
 

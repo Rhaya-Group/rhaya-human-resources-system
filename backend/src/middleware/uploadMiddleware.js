@@ -14,6 +14,6 @@ export const uploadSingle = multer({
   limits: { fileSize: 30 * 1024 * 1024 },
   fileFilter(_req, file, cb) {
     if (ALLOWED_MIME.includes(file.mimetype)) cb(null, true);
-    else cb(Object.assign(new Error("Only PDF, DOCX, ZIP allowed"), { status: 415 }));
+    else cb(Object.assign(new Error("Only PDF, DOCX, ZIP allowed"), { statusCode: 415 }));
   },
 }).single("file");

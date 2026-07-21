@@ -7,6 +7,11 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { validationResult } from "express-validator";
 import prisma from "../config/database.js";
+import { publicFileUrl } from "../services/r2.service.js";
+
+function withPublicCv(applicant) {
+  return applicant ? { ...applicant, cvFileUrl: publicFileUrl(applicant.cvFileUrl) } : applicant;
+}
 
 function signApplicantToken(applicant) {
   return jwt.sign({ applicantId: applicant.id }, process.env.JWT_SECRET, {
@@ -34,11 +39,11 @@ export const register = async (req, res) => {
 
     const applicant = await prisma.applicant.create({
       data: { email: normalizedEmail, password: hashedPassword, name, phone: phone || null },
-      select: { id: true, email: true, name: true, phone: true, resumeUrl: true },
+      select: { id: true, email: true, name: true, phone: true, resumeUrl: true, cvFileUrl: true },
     });
 
     const token = signApplicantToken(applicant);
-    return res.status(201).json({ token, applicant });
+    return res.status(201).json({ token, applicant: withPublicCv(applicant) });
   } catch (error) {
     console.error("Applicant register error:", error);
     return res.status(500).json({ error: "Failed to register. Please try again later." });
@@ -71,7 +76,7 @@ export const login = async (req, res) => {
 
     const token = signApplicantToken(applicant);
     const { password: _, ...safe } = applicant;
-    return res.json({ token, applicant: safe });
+    return res.json({ token, applicant: withPublicCv(safe) });
   } catch (error) {
     console.error("Applicant login error:", error);
     return res.status(500).json({ error: "Failed to log in. Please try again later." });
@@ -81,7 +86,7 @@ export const login = async (req, res) => {
 // GET /api/recruitment/applicant-auth/me
 export const me = async (req, res) => {
   // req.applicant set by applicantAuthenticate
-  return res.json({ applicant: req.applicant });
+  return res.json({ applicant: withPublicCv(req.applicant) });
 };
 
 export default { register, login, me };

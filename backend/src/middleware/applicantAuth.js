@@ -23,7 +23,7 @@ export const applicantAuthenticate = async (req, res, next) => {
 
     const applicant = await prisma.applicant.findUnique({
       where: { id: decoded.applicantId },
-      select: { id: true, email: true, name: true, phone: true, resumeUrl: true },
+      select: { id: true, email: true, name: true, phone: true, resumeUrl: true, cvFileUrl: true },
     });
 
     if (!applicant) {

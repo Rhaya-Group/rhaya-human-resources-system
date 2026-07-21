@@ -1,4 +1,5 @@
 import prisma from "../config/database.js";
+import { publicFileUrl } from "../services/r2.service.js";
 
 const emptyParsedCv = {
   summary: "",
@@ -129,7 +130,11 @@ export const getProfile = async (req, res) => {
         },
       },
     });
-    return res.json({ ...applicant, parsedCv: normalizeParsedCv(applicant?.parsedCv || emptyParsedCv) });
+    return res.json({
+      ...applicant,
+      cvFileUrl: publicFileUrl(applicant?.cvFileUrl),
+      parsedCv: normalizeParsedCv(applicant?.parsedCv || emptyParsedCv),
+    });
   } catch (error) {
     console.error("Get applicant profile error:", error);
     return res.status(500).json({ error: "Failed to fetch profile" });
@@ -158,7 +163,7 @@ export const updateProfile = async (req, res) => {
       data,
       select: { id: true, name: true, email: true, cvFileUrl: true, parsedCv: true },
     });
-    return res.json(applicant);
+    return res.json({ ...applicant, cvFileUrl: publicFileUrl(applicant.cvFileUrl) });
   } catch (error) {
     console.error("Update applicant profile error:", error);
     if (error.code === "P2002") {

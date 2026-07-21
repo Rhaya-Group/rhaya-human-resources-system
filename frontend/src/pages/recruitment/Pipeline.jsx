@@ -4,6 +4,7 @@ import { useParams, Link } from "react-router-dom";
 import apiClient from "../../api/client";
 import { STAGES, STAGE_LABELS, StageBadge } from "../../utils/stages.jsx";
 import RecruitmentDocumentList from "./RecruitmentDocumentList.jsx";
+import DocumentPreviewModal from "../../components/DocumentPreviewModal.jsx";
 
 function answerText(value) {
   if (Array.isArray(value)) return value.join(", ");
@@ -84,6 +85,8 @@ function ApplicantDrawer({ applicationId, onClose, onChanged }) {
   const [stage, setStage] = useState("");
   const [rejectedReason, setRejectedReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [resumePreview, setResumePreview] = useState(null);
+  const [resumeLoading, setResumeLoading] = useState(false);
 
   const { data: app } = useQuery({
     queryKey: ["application", applicationId],
@@ -117,6 +120,24 @@ function ApplicantDrawer({ applicationId, onClose, onChanged }) {
     } finally { setBusy(false); }
   }
 
+  async function viewResume() {
+    setResumeLoading(true);
+    try {
+      const res = await apiClient.get(`/recruitment/applications/${applicationId}/resume`, { responseType: "blob" });
+      setResumePreview({
+        href: URL.createObjectURL(res.data),
+        mimeType: res.headers["content-type"] || "application/pdf",
+      });
+    } finally {
+      setResumeLoading(false);
+    }
+  }
+
+  function closeResumePreview() {
+    if (resumePreview?.href) URL.revokeObjectURL(resumePreview.href);
+    setResumePreview(null);
+  }
+
   const inboundDocs = app?.documents?.filter((doc) => doc.direction === "inbound") || [];
   const outboundDocs = app?.documents?.filter((doc) => doc.direction === "outbound") || [];
   const resumeUrl = app?.resumeUrl || app?.applicant?.cvFileUrl || app?.applicant?.resumeUrl;
@@ -142,9 +163,9 @@ function ApplicantDrawer({ applicationId, onClose, onChanged }) {
                 )}
               </p>
               {resumeUrl && (
-                <a href={resumeUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
-                  View resume
-                </a>
+                <button type="button" onClick={viewResume} className="text-blue-600 hover:underline">
+                  {resumeLoading ? "Loading resume..." : "View resume"}
+                </button>
               )}
               {app.coverLetter && (
                 <p className="whitespace-pre-wrap text-gray-700 mt-2 border-l-2 border-gray-200 pl-2">{app.coverLetter}</p>
@@ -221,6 +242,14 @@ function ApplicantDrawer({ applicationId, onClose, onChanged }) {
               </ul>
             </div>
           </>
+        )}
+        {resumePreview && (
+          <DocumentPreviewModal
+            fileName="Resume"
+            mimeType={resumePreview.mimeType}
+            previewUrl={resumePreview.href}
+            onClose={closeResumePreview}
+          />
         )}
       </div>
     </div>
