@@ -4,6 +4,11 @@ import {
   invalidatePolicyCache,
   clearPolicyCache,
 } from "../helpers/policyResolver.js";
+import { uploadCompanyFile, deleteFromR2, getR2DownloadUrl } from "../config/storage.js";
+
+// PNG/JPEG only — ExcelJS's addImage (used to embed the logo into payslips)
+// only supports png/jpeg/gif, not SVG.
+const LOGO_ALLOWED_MIME_TYPES = ["image/png", "image/jpeg", "image/jpg"];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -250,6 +255,96 @@ export const deleteTemplate = async (req, res) => {
       return res.status(404).json({ error: "Template not found" });
     console.error("[PolicyTemplate] deleteTemplate error:", err);
     res.status(500).json({ error: "Failed to delete template" });
+  }
+};
+
+// POST /api/policy-templates/:id/logo  (multipart, field name "file")
+// Uploads a payslip logo image and attaches it to the template. Replaces
+// any existing logo (old R2 object is deleted).
+export const uploadPayslipLogo = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+    if (!LOGO_ALLOWED_MIME_TYPES.includes(req.file.mimetype)) {
+      return res.status(400).json({
+        error: "Logo must be PNG, JPEG, or SVG",
+      });
+    }
+
+    const template = await prisma.policyTemplate.findUnique({ where: { id } });
+    if (!template) return res.status(404).json({ error: "Template not found" });
+
+    const key = await uploadCompanyFile(
+      req.file.buffer,
+      "policy-logos",
+      `${id}-${Date.now()}-${req.file.originalname}`,
+    );
+
+    if (template.payslipLogoUrl) {
+      await deleteFromR2(template.payslipLogoUrl).catch((err) =>
+        console.error("[PolicyTemplate] Failed to delete old logo:", err.message),
+      );
+    }
+
+    const updated = await prisma.policyTemplate.update({
+      where: { id },
+      data: { payslipLogoUrl: key },
+    });
+
+    clearPolicyCache();
+    console.log(`[PolicyTemplate] Logo uploaded for "${updated.name}" by ${req.user?.name}`);
+    res.json({ success: true, data: updated });
+  } catch (err) {
+    console.error("[PolicyTemplate] uploadPayslipLogo error:", err);
+    res.status(500).json({ error: "Failed to upload logo" });
+  }
+};
+
+// GET /api/policy-templates/:id/logo  — signed preview URL for the admin UI
+export const getPayslipLogoUrl = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const template = await prisma.policyTemplate.findUnique({ where: { id } });
+    if (!template) return res.status(404).json({ error: "Template not found" });
+    if (!template.payslipLogoUrl) {
+      return res.json({ success: true, data: { url: null } });
+    }
+    const url = await getR2DownloadUrl(template.payslipLogoUrl, 3600);
+    res.json({ success: true, data: { url } });
+  } catch (err) {
+    console.error("[PolicyTemplate] getPayslipLogoUrl error:", err);
+    res.status(500).json({ error: "Failed to get logo URL" });
+  }
+};
+
+// DELETE /api/policy-templates/:id/logo
+export const deletePayslipLogo = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const template = await prisma.policyTemplate.findUnique({ where: { id } });
+    if (!template) return res.status(404).json({ error: "Template not found" });
+
+    if (template.payslipLogoUrl) {
+      await deleteFromR2(template.payslipLogoUrl).catch((err) =>
+        console.error("[PolicyTemplate] Failed to delete logo from R2:", err.message),
+      );
+    }
+
+    const updated = await prisma.policyTemplate.update({
+      where: { id },
+      data: { payslipLogoUrl: null },
+    });
+
+    clearPolicyCache();
+    console.log(`[PolicyTemplate] Logo removed for "${updated.name}" by ${req.user?.name}`);
+    res.json({ success: true, data: updated });
+  } catch (err) {
+    console.error("[PolicyTemplate] deletePayslipLogo error:", err);
+    res.status(500).json({ error: "Failed to remove logo" });
   }
 };
 

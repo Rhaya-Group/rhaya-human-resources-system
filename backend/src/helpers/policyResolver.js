@@ -21,6 +21,7 @@ export const DEFAULT_POLICY = {
   overtimeRateHoliday: 3.0,
   lateToleranceMinutes: 15,
   internalPolicyUrl: null,
+  payslipLogoUrl: null,
   hrEmail: null,
   smtpProfile: null,
 };
@@ -52,6 +53,7 @@ function templateToPolicy(template, assignmentLabel) {
     overtimeRateHoliday: template.overtimeRateHoliday,
     lateToleranceMinutes: template.lateToleranceMinutes,
     internalPolicyUrl: template.internalPolicyUrl ?? null,
+    payslipLogoUrl: template.payslipLogoUrl ?? null,
     hrEmail: template.hrEmail ?? null,
     smtpProfile: template.smtpProfile ?? null,
   };

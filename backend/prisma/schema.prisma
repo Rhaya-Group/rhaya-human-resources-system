@@ -242,6 +242,12 @@ model PolicyTemplate {
   // ── Internal policy document ──────────────────────────────────────────────
   internalPolicyUrl     String?
 
+  // ── Payslip branding ──────────────────────────────────────────────────────
+  // payslipLogoUrl: R2 key of the logo image inserted into payslips generated
+  // for entities using this policy. Null = fall back to the default logo
+  // baked into Template_Payslip.xlsx.
+  payslipLogoUrl        String?
+
   // ── HR contact & SMTP profile ─────────────────────────────────────────────
   // hrEmail: designated HR email for notifications tied to this policy
   hrEmail      String?
