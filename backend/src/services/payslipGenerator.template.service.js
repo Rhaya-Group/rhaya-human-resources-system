@@ -578,10 +578,13 @@ export const fillTemplateAndConvertToPDF = async (employeeData, payrollData, per
   // ── Convert to HTML ────────────────────────────────────────────────────────
   const htmlTable = await excelRangeToHtml(sheet, 'A1:F49');
 
-  // Logo sits in the same top-left header region the static "Rhaya Flicks"
-  // text otherwise occupies (B2/B3, cleared above when a custom logo is set).
+  // Logo sits over column B (where the static "Rhaya Flicks" title, cell B1,
+  // otherwise renders), not flush against the left edge (column A). The
+  // rendered table has no fixed column widths (auto-layout), so this is an
+  // approximation of column A's width (5.5 Excel units ≈ 11.7mm) rather than
+  // a pixel-exact match — good enough since column A is just a narrow margin.
   const logoHtml = logoDataUri
-    ? `<img src="${logoDataUri}" alt="Company logo" style="position: absolute; top: 0; left: 0; max-height: 50px; max-width: 160px; object-fit: contain;" />`
+    ? `<img src="${logoDataUri}" alt="Company logo" style="position: absolute; top: 0; left: 11.7mm; max-height: 50px; max-width: 160px; object-fit: contain;" />`
     : '';
 
   const htmlContent = `
