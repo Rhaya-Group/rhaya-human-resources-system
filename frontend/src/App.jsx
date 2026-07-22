@@ -46,6 +46,7 @@ import JobPostings from "./pages/recruitment/JobPostings";
 import Pipeline from "./pages/recruitment/Pipeline";
 import CandidatePool from "./pages/recruitment/CandidatePool";
 import DocumentManagement from "./pages/recruitment/DocumentManagement";
+import PositionOverseers from "./pages/recruitment/PositionOverseers";
 
 // Layout
 import Layout from "./components/Layout";
@@ -417,6 +418,14 @@ function App() {
             element={
               <ProtectedRoute allowedLevels={[1, 2]}>
                 <QuestionAssignment />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recruitment/jobs/:postingId/overseers"
+            element={
+              <ProtectedRoute allowedLevels={[1, 2]}>
+                <PositionOverseers />
               </ProtectedRoute>
             }
           />

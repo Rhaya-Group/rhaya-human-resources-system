@@ -17,32 +17,45 @@ async function assertManageAccess(postingId, user) {
 }
 
 export const listOverseers = async (req, res) => {
-  await assertManageAccess(req.params.postingId, req.user);
-  const overseers = await prisma.positionOverseer.findMany({
-    where: { jobPostingId: req.params.postingId },
-    include: { hrisUser: { select: { id: true, name: true, email: true, accessLevel: true } } },
-  });
-  res.json(overseers);
+  try {
+    await assertManageAccess(req.params.postingId, req.user);
+    const overseers = await prisma.positionOverseer.findMany({
+      where: { jobPostingId: req.params.postingId },
+      include: { hrisUser: { select: { id: true, name: true, email: true, accessLevel: true } } },
+    });
+    res.json(overseers);
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.message || "Failed to fetch overseers" });
+  }
 };
 
 export const addOverseer = async (req, res) => {
-  await assertManageAccess(req.params.postingId, req.user);
-  const { hrisUserId, access } = req.body;
-  if (!hrisUserId) return res.status(400).json({ error: "hrisUserId required" });
+  try {
+    await assertManageAccess(req.params.postingId, req.user);
+    const { hrisUserId, access } = req.body;
+    if (!hrisUserId) return res.status(400).json({ error: "hrisUserId required" });
+    if (access && !["view", "manage"].includes(access)) return res.status(400).json({ error: "access must be view or manage" });
 
-  const overseer = await prisma.positionOverseer.upsert({
-    where: { jobPostingId_hrisUserId: { jobPostingId: req.params.postingId, hrisUserId } },
-    create: { jobPostingId: req.params.postingId, hrisUserId, access: access ?? "view", addedBy: req.user.id },
-    update: { access: access ?? "view" },
-    include: { hrisUser: { select: { id: true, name: true, email: true } } },
-  });
-  res.status(201).json(overseer);
+    const overseer = await prisma.positionOverseer.upsert({
+      where: { jobPostingId_hrisUserId: { jobPostingId: req.params.postingId, hrisUserId } },
+      create: { jobPostingId: req.params.postingId, hrisUserId, access: access ?? "view", addedBy: req.user.id },
+      update: { access: access ?? "view" },
+      include: { hrisUser: { select: { id: true, name: true, email: true, accessLevel: true } } },
+    });
+    res.status(201).json(overseer);
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.message || "Failed to add overseer" });
+  }
 };
 
 export const removeOverseer = async (req, res) => {
-  await assertManageAccess(req.params.postingId, req.user);
-  await prisma.positionOverseer.deleteMany({
-    where: { jobPostingId: req.params.postingId, hrisUserId: req.params.userId },
-  });
-  res.status(204).end();
+  try {
+    await assertManageAccess(req.params.postingId, req.user);
+    await prisma.positionOverseer.deleteMany({
+      where: { jobPostingId: req.params.postingId, hrisUserId: req.params.userId },
+    });
+    res.status(204).end();
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.message || "Failed to remove overseer" });
+  }
 };
