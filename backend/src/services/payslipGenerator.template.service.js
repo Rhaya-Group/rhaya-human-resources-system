@@ -203,7 +203,7 @@ export const parsePayrollSheet = async (excelBuffer, sheetName) => {
 /**
  * Convert Excel worksheet range to HTML with merged cells support
  */
-async function excelRangeToHtml(sheet, range) {
+async function excelRangeToHtml(sheet, range, headerLogoDataUri = null) {
   const [startCell, endCell] = range.split(':');
   const startRow = parseInt(startCell.match(/\d+/)[0]);
   const endRow = parseInt(endCell.match(/\d+/)[0]);
@@ -309,7 +309,16 @@ async function excelRangeToHtml(sheet, range) {
       if (typeof value === 'number') {
         value = Math.round(value).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
       }
-      
+
+      // Custom payslip logo replaces the title cell's content (B1) directly,
+      // rather than floating as a separately-positioned overlay — this way
+      // it's flush with the same column/padding as the address (B2) and
+      // email (B3) directly below it, guaranteed by being the same cell
+      // structure instead of guessed pixel offsets.
+      if (headerLogoDataUri && r === 1 && c === 2) {
+        value = `<img src="${headerLogoDataUri}" alt="Company logo" style="display: block; max-height: 42px; max-width: 140px; object-fit: contain;" />`;
+      }
+
       // Build cell style
       let style = 'padding: 4px 8px;';
       
@@ -442,12 +451,10 @@ export const fillTemplateAndConvertToPDF = async (employeeData, payrollData, per
   sheet.mergeCells('B3:D3');
 
   // A custom logo replaces the template's static "Rhaya Flicks" title (B1)
-  // entirely, rather than rendering underneath/behind it. The address (B2)
-  // and email (B3) lines are left as-is — they're a separate, pre-existing
-  // limitation (hardcoded per-entity contact info), not part of this fix.
-  if (logoDataUri) {
-    sheet.getCell('B1').value = '';
-  }
+  // — handled at render time in excelRangeToHtml, so it lands in the exact
+  // same cell/column as the address (B2) and email (B3) directly below it.
+  // Those two lines are left as-is — a separate, pre-existing limitation
+  // (hardcoded per-entity contact info), not part of this fix.
 
   sheet.getCell('B5').value = employeeData.plottingCompanyName || 'PT Rhayakan Film Indonesia';
   sheet.mergeCells('B5:C5');
@@ -576,16 +583,10 @@ export const fillTemplateAndConvertToPDF = async (employeeData, payrollData, per
   sheet.getCell('E34').value = payrollData.netPay; // Use net pay from Excel to ensure consistency with template calculations
 
   // ── Convert to HTML ────────────────────────────────────────────────────────
-  const htmlTable = await excelRangeToHtml(sheet, 'A1:F49');
-
-  // Logo sits over column B (where the static "Rhaya Flicks" title, cell B1,
-  // otherwise renders), not flush against the left edge (column A). The
-  // rendered table has no fixed column widths (auto-layout), so this is an
-  // approximation of column A's width (5.5 Excel units ≈ 11.7mm) rather than
-  // a pixel-exact match — good enough since column A is just a narrow margin.
-  const logoHtml = logoDataUri
-    ? `<img src="${logoDataUri}" alt="Company logo" style="position: absolute; top: 0; left: 11.7mm; max-height: 50px; max-width: 160px; object-fit: contain;" />`
-    : '';
+  // Custom logo (if any) is injected directly into cell B1 inside
+  // excelRangeToHtml, so it lands in the exact same column as the address/
+  // email lines below it — no separate positioning needed.
+  const htmlTable = await excelRangeToHtml(sheet, 'A1:F49', logoDataUri);
 
   const htmlContent = `
     <!DOCTYPE html>
@@ -601,7 +602,6 @@ export const fillTemplateAndConvertToPDF = async (employeeData, payrollData, per
           margin: 0;
           padding: 0;
           width: 210mm;  /* A4 width */
-          position: relative;
         }
         table {
           width: 100%;
@@ -609,7 +609,7 @@ export const fillTemplateAndConvertToPDF = async (employeeData, payrollData, per
         }
       </style>
     </head>
-    <body>${logoHtml}${htmlTable}</body>
+    <body>${htmlTable}</body>
     </html>
   `;
   
