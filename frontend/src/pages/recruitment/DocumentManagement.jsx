@@ -18,6 +18,7 @@ export default function DocumentManagement() {
   const [targetId, setTargetId] = useState("");
   const [form, setForm] = useState(emptyForm);
   const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState(null);
   const params = targetId.trim() ? { [scope]: targetId.trim() } : null;
 
   const { data: jobs = [] } = useQuery({
@@ -47,6 +48,7 @@ export default function DocumentManagement() {
     e.preventDefault();
     if (!params || !form.title.trim()) return;
     setBusy(true);
+    setMessage(null);
     try {
       if (form.kind === "file") {
         const body = new FormData();
@@ -68,9 +70,10 @@ export default function DocumentManagement() {
         });
       }
       setForm(emptyForm);
+      setMessage({ type: "ok", text: "Document issued successfully." });
       qc.invalidateQueries({ queryKey: ["recruitmentDocuments", scope, targetId] });
     } catch (error) {
-      alert(error.response?.data?.error || "Failed to issue document");
+      setMessage({ type: "err", text: error.response?.data?.error || "Failed to issue document" });
     } finally {
       setBusy(false);
     }
@@ -128,6 +131,11 @@ export default function DocumentManagement() {
 
       <form onSubmit={issue} className="bg-white border border-gray-200 rounded-lg p-4 mb-5 space-y-3">
         <h2 className="font-semibold text-gray-900">Issue outbound document</h2>
+        {message && (
+          <p className={`text-sm ${message.type === "ok" ? "text-green-700" : "text-red-600"}`}>
+            {message.text}
+          </p>
+        )}
         <div className="grid md:grid-cols-2 gap-3">
           <input
             value={form.title}

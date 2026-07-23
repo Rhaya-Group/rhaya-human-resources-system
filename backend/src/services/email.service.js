@@ -245,7 +245,7 @@ function recruitmentEmailDocument({ title, bodyHtml }) {
     headerTitle: title,
     colors: {
       headerBg: BRAND_COLORS.primary,
-      headerBg2: null,
+      headerBg2: BRAND_COLORS.secondary,
       primary: BRAND_COLORS.primary,
       secondary: BRAND_COLORS.secondary,
       accent: BRAND_COLORS.accent,
