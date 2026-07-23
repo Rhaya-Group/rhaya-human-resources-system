@@ -96,12 +96,13 @@ export async function getEntityPolicy(entityId) {
   const cached = getCached(`entity:${entityId}`);
   if (cached) return cached;
 
-  // One query: entity + its group id, plus ALL matching active assignments
+  // One query: entity + its group/subgroup ids, plus ALL matching active assignments
   const entity = await prisma.plottingCompany.findUnique({
     where: { id: entityId },
     select: {
       id: true,
       groupId: true,
+      subgroupId: true,
       policyAssignments: {
         // ← must match the relation field name in schema
         where: { isActive: true },
@@ -122,14 +123,26 @@ export async function getEntityPolicy(entityId) {
           },
         },
       },
+      subgroup: {
+        select: {
+          policyAssignments: {
+            where: { isActive: true },
+            include: {
+              template: true,
+            },
+            orderBy: { priority: "desc" },
+          },
+        },
+      },
     },
   });
 
   if (!entity) return { ...DEFAULT_POLICY };
 
-  // Merge entity-level and group-level assignments, re-sort by priority
+  // Merge entity-, subgroup-, and group-level assignments, re-sort by priority
   const allAssignments = [
     ...(entity.policyAssignments || []),
+    ...(entity.subgroup?.policyAssignments || []),
     ...(entity.group?.policyAssignments || []),
   ]
     .filter((a) => a.template?.isActive) // skip soft-deleted templates
@@ -183,12 +196,38 @@ export async function getGroupPolicy(groupId) {
 }
 
 /**
- * Invalidate cache entries for an entity and/or group.
+ * Resolve policy by subgroup ID.
+ * Returns the highest-priority template assigned to the subgroup.
+ */
+export async function getSubgroupPolicy(subgroupId) {
+  if (!subgroupId) return { ...DEFAULT_POLICY };
+
+  const cached = getCached(`subgroup:${subgroupId}`);
+  if (cached) return cached;
+
+  const assignments = await prisma.policyAssignment.findMany({
+    where: { entitySubgroupId: subgroupId, isActive: true },
+    include: { template: true },
+    orderBy: { priority: "desc" },
+  });
+
+  const policy =
+    assignments.length > 0
+      ? templateToPolicy(assignments[0].template, assignments[0].label)
+      : { ...DEFAULT_POLICY };
+
+  setCache(`subgroup:${subgroupId}`, policy);
+  return policy;
+}
+
+/**
+ * Invalidate cache entries for an entity, subgroup, and/or group.
  * Call after any PolicyAssignment create/update/delete.
  */
-export function invalidatePolicyCache(entityId, groupId) {
+export function invalidatePolicyCache(entityId, groupId, subgroupId) {
   if (entityId) cache.delete(`entity:${entityId}`);
   if (groupId) cache.delete(`group:${groupId}`);
+  if (subgroupId) cache.delete(`subgroup:${subgroupId}`);
 }
 
 export function clearPolicyCache() {
