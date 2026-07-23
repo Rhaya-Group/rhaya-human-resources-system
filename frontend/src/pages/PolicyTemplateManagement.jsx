@@ -38,6 +38,7 @@ const BLANK_TEMPLATE = {
 export default function PolicyTemplateManagement() {
   const [templates,    setTemplates]    = useState([]);
   const [groups,       setGroups]       = useState([]);
+  const [subgroups,    setSubgroups]    = useState([]);
   const [entities,     setEntities]     = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [showTplModal, setShowTplModal] = useState(false);
@@ -50,13 +51,15 @@ export default function PolicyTemplateManagement() {
   async function fetchAll() {
     try {
       setLoading(true);
-      const [tplRes, grpRes, entRes] = await Promise.all([
+      const [tplRes, grpRes, sgrpRes, entRes] = await Promise.all([
         apiClient.get('/policy-templates'),
         apiClient.get('/entity-groups'),
+        apiClient.get('/entity-subgroups'),
         apiClient.get('/plotting-companies'),
       ]);
       setTemplates(tplRes.data.data  || []);
       setGroups(grpRes.data.data     || []);
+      setSubgroups(sgrpRes.data.data || []);
       setEntities(entRes.data.data   || []);
     } catch (err) {
       console.error(err);
@@ -167,6 +170,7 @@ export default function PolicyTemplateManagement() {
         <AssignmentModal
           template={assigningTpl}
           groups={groups}
+          subgroups={subgroups}
           entities={entities}
           existingAssignments={assigningTpl.assignments || []}
           onClose={() => setShowAsnModal(false)}
@@ -183,8 +187,9 @@ function TemplateCard({ template, onEdit, onDelete, onAssign, onDeleteAssignment
   const [expanded, setExpanded] = useState(false);
 
   const assignments = template.assignments || [];
-  const entityAssignments = assignments.filter(a => a.entityId);
-  const groupAssignments  = assignments.filter(a => a.entityGroupId);
+  const entityAssignments   = assignments.filter(a => a.entityId);
+  const groupAssignments    = assignments.filter(a => a.entityGroupId);
+  const subgroupAssignments = assignments.filter(a => a.entitySubgroupId);
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
@@ -320,6 +325,31 @@ function TemplateCard({ template, onEdit, onDelete, onAssign, onDeleteAssignment
                       {a.entityGroup?.name}
                     </span>
                     <span className="text-xs text-gray-400">group</span>
+                    <span className="ml-auto text-xs bg-gray-100 px-2 py-0.5 rounded text-gray-600">
+                      priority {a.priority}
+                    </span>
+                    {a.label && <span className="text-xs text-gray-500 italic">{a.label}</span>}
+                    <button onClick={() => onDeleteAssignment(a.id)}
+                      className="text-red-400 hover:text-red-600 ml-1"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+
+                {/* Subgroup assignments */}
+                {subgroupAssignments.map(a => (
+                  <div key={a.id}
+                    className="flex items-center gap-3 py-1.5 px-3 bg-white rounded border border-gray-200"
+                  >
+                    <Tag className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                    <span
+                      className="text-xs font-medium px-2 py-0.5 rounded"
+                      style={{ backgroundColor: `${a.entitySubgroup?.color}20`, color: a.entitySubgroup?.color }}
+                    >
+                      {a.entitySubgroup?.name}
+                    </span>
+                    <span className="text-xs text-gray-400">subgroup</span>
                     <span className="ml-auto text-xs bg-gray-100 px-2 py-0.5 rounded text-gray-600">
                       priority {a.priority}
                     </span>
@@ -754,13 +784,14 @@ function TemplateModal({ editing, onClose, onSaved }) {
 // ─── Assignment Modal ─────────────────────────────────────────────────────────
 // Select multiple entities and/or groups + set priority for each
 
-function AssignmentModal({ template, groups, entities, existingAssignments, onClose, onSaved }) {
+function AssignmentModal({ template, groups, subgroups, entities, existingAssignments, onClose, onSaved }) {
   // Already-assigned IDs for this template
-  const assignedEntityIds = new Set(existingAssignments.filter(a=>a.entityId).map(a=>a.entityId));
-  const assignedGroupIds  = new Set(existingAssignments.filter(a=>a.entityGroupId).map(a=>a.entityGroupId));
+  const assignedEntityIds    = new Set(existingAssignments.filter(a=>a.entityId).map(a=>a.entityId));
+  const assignedGroupIds     = new Set(existingAssignments.filter(a=>a.entityGroupId).map(a=>a.entityGroupId));
+  const assignedSubgroupIds  = new Set(existingAssignments.filter(a=>a.entitySubgroupId).map(a=>a.entitySubgroupId));
 
-  const [tab, setTab]         = useState('entities'); // 'entities' | 'groups'
-  const [selected, setSelected] = useState([]); // [{ entityId|entityGroupId, priority, label }]
+  const [tab, setTab]         = useState('entities'); // 'entities' | 'subgroups' | 'groups'
+  const [selected, setSelected] = useState([]); // [{ entityId|entityGroupId|entitySubgroupId, priority, label }]
   const [priority, setPriority] = useState(10);
   const [label, setLabel]       = useState('');
   const [saving, setSaving]     = useState(false);
@@ -779,8 +810,16 @@ function AssignmentModal({ template, groups, entities, existingAssignments, onCl
     });
   }
 
-  function isSelectedEntity(id) { return !!selected.find(s => s.entityId === id); }
-  function isSelectedGroup(id)  { return !!selected.find(s => s.entityGroupId === id); }
+  function toggleSubgroup(id) {
+    setSelected(prev => {
+      if (prev.find(s => s.entitySubgroupId === id)) return prev.filter(s => s.entitySubgroupId !== id);
+      return [...prev, { entitySubgroupId: id }];
+    });
+  }
+
+  function isSelectedEntity(id)   { return !!selected.find(s => s.entityId === id); }
+  function isSelectedGroup(id)    { return !!selected.find(s => s.entityGroupId === id); }
+  function isSelectedSubgroup(id) { return !!selected.find(s => s.entitySubgroupId === id); }
 
   async function handleSave() {
     if (selected.length === 0) return alert('Select at least one entity or group');
@@ -805,8 +844,9 @@ function AssignmentModal({ template, groups, entities, existingAssignments, onCl
     }
   }
 
-  const availableEntities = entities.filter(e => !assignedEntityIds.has(e.id));
-  const availableGroups   = groups.filter(g => !assignedGroupIds.has(g.id));
+  const availableEntities   = entities.filter(e => !assignedEntityIds.has(e.id));
+  const availableGroups     = groups.filter(g => !assignedGroupIds.has(g.id));
+  const availableSubgroups  = subgroups.filter(s => !assignedSubgroupIds.has(s.id));
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -846,6 +886,13 @@ function AssignmentModal({ template, groups, entities, existingAssignments, onCl
               <Building2 className="w-4 h-4 inline mr-1" />
               Entities ({selected.filter(s=>s.entityId).length} selected)
             </button>
+            <button type="button" onClick={() => setTab('subgroups')}
+              className={`flex-1 py-2 text-sm font-medium ${
+                tab === 'subgroups' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'
+              }`}>
+              <Tag className="w-4 h-4 inline mr-1" />
+              Subgroups ({selected.filter(s=>s.entitySubgroupId).length} selected)
+            </button>
             <button type="button" onClick={() => setTab('groups')}
               className={`flex-1 py-2 text-sm font-medium ${
                 tab === 'groups' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'
@@ -878,6 +925,29 @@ function AssignmentModal({ template, groups, entities, existingAssignments, onCl
                           {e.group.name}
                         </span>
                       )}
+                    </label>
+                  ))
+            ) : tab === 'subgroups' ? (
+              availableSubgroups.length === 0
+                ? <p className="text-sm text-gray-400 text-center py-4">All subgroups already assigned</p>
+                : availableSubgroups.map(sg => (
+                    <label key={sg.id}
+                      className="flex items-center gap-3 p-2.5 hover:bg-gray-50 rounded-lg border border-gray-100 cursor-pointer"
+                    >
+                      <input type="checkbox"
+                        checked={isSelectedSubgroup(sg.id)}
+                        onChange={() => toggleSubgroup(sg.id)}
+                        className="w-4 h-4 text-blue-600 rounded" />
+                      <span className="w-3 h-3 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: sg.color }} />
+                      <span className="text-sm text-gray-800 flex-1">{sg.name}</span>
+                      {sg.group && (
+                        <span className="text-xs px-2 py-0.5 rounded"
+                          style={{ backgroundColor: `${sg.group.color}20`, color: sg.group.color }}>
+                          {sg.group.name}
+                        </span>
+                      )}
+                      <span className="text-xs text-gray-400">{sg.code}</span>
                     </label>
                   ))
             ) : (

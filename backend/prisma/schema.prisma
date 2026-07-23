@@ -201,6 +201,8 @@ model EntitySubgroup {
   group       EntityGroup       @relation(fields: [groupId], references: [id])
   companies   PlottingCompany[]
 
+  policyAssignments PolicyAssignment[] @relation("SubgroupPolicyAssignments")
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -290,8 +292,9 @@ model PolicyAssignment {
   template    PolicyTemplate @relation(fields: [templateId], references: [id])
 
   // Target — exactly one of these is set
-  entityId      String?
-  entityGroupId String?
+  entityId        String?
+  entityGroupId   String?
+  entitySubgroupId String?
 
   // Higher = wins when multiple assignments match the same entity
   priority    Int     @default(10)
@@ -304,12 +307,14 @@ model PolicyAssignment {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  entity       PlottingCompany? @relation("EntityPolicyAssignments", fields: [entityId],      references: [id])
-  entityGroup  EntityGroup?     @relation("GroupPolicyAssignments",  fields: [entityGroupId], references: [id])
+  entity         PlottingCompany? @relation("EntityPolicyAssignments",   fields: [entityId],         references: [id])
+  entityGroup    EntityGroup?     @relation("GroupPolicyAssignments",    fields: [entityGroupId],    references: [id])
+  entitySubgroup EntitySubgroup?  @relation("SubgroupPolicyAssignments", fields: [entitySubgroupId], references: [id])
 
   // Prevent duplicate assignments of same template to same target
   @@unique([templateId, entityId])
   @@unique([templateId, entityGroupId])
+  @@unique([templateId, entitySubgroupId])
 
   @@map("policy_assignments")
 }
