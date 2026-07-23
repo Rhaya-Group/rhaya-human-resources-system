@@ -40,13 +40,14 @@ export const listPublicQuestions = async (req, res) => {
     }
 
     const questions = await prisma.positionQuestion.findMany({
-      where: { jobPostingId, question: { is: { scope: "position" } } },
+      where: { jobPostingId },
       include: {
         question: {
           select: {
             id: true,
             text: true,
             type: true,
+            scope: true,
           },
         },
       },
@@ -86,7 +87,7 @@ export const apply = async (req, res) => {
 
     const submittedAnswers = answers.filter((answer) => answer.value !== undefined && answer.value !== null);
     const assignedQuestions = await prisma.positionQuestion.findMany({
-      where: { jobPostingId, question: { is: { scope: "position" } } },
+      where: { jobPostingId },
       include: { question: true },
     });
     const questionsById = new Map(assignedQuestions.map((row) => [row.questionId, row.question]));
