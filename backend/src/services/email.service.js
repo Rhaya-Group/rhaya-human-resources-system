@@ -3,6 +3,17 @@
 
 import axios from "axios";
 import nodemailer from "nodemailer";
+import {
+  renderEmailDocument,
+  renderStatusBadge,
+  renderInfoCard,
+  renderCalloutBox,
+  renderChecklist,
+  renderButton,
+  renderActionButtons,
+  renderFooter,
+  escapeHtml,
+} from "../templates/email/index.js";
 
 // const SMTP2GO_API_URL = "https://api.smtp2go.com/v3/email/send";
 const SMTP_API_URL = process.env.SMTP_API_URL;
@@ -17,6 +28,15 @@ const BRAND_COLORS = {
   cardBorder: "#E0E0E0", // Border Grey
   textPrimary: "#000000", // Black text
   textSecondary: "#666666", // Grey text
+};
+
+// Reserved for genuinely positive-outcome headers/badges only (approved, welcome,
+// payslip-ready) — kept distinct from BRAND_COLORS.primary so a scanning inbox
+// can tell "good news" apart from routine/neutral notifications at a glance.
+const POSITIVE_COLORS = {
+  headerBg: "#15803D",
+  headerBg2: "#166534",
+  badgeBg: "#15803D",
 };
 
 if (!API_KEY) {
@@ -267,214 +287,53 @@ export async function sendOvertimeApprovedEmail(user, overtimeRequest, { smtpPro
     day: "numeric",
   });
 
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <style>
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-          line-height: 1.6;
-          color: ${BRAND_COLORS.textPrimary};
-          margin: 0;
-          padding: 0;
-          background-color: #F9F9F9;
-        }
-        .email-wrapper {
-          width: 100%;
-          background-color: #F9F9F9;
-          padding: 40px 20px;
-        }
-        .container {
-          max-width: 600px;
-          margin: 0 auto;
-          background: ${BRAND_COLORS.accent};
-          border-radius: 12px;
-          overflow: hidden;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        .header {
-          background: linear-gradient(135deg, ${BRAND_COLORS.primary} 0%, ${BRAND_COLORS.secondary} 100%);
-          color: ${BRAND_COLORS.accent};
-          padding: 40px 30px;
-          text-align: center;
-        }
-        .header h1 {
-          margin: 0;
-          font-size: 28px;
-          font-weight: 600;
-          letter-spacing: -0.5px;
-        }
-        .content {
-          padding: 40px 30px;
-          text-align: center;
-        }
-        .content p {
-          margin: 0 0 20px 0;
-          font-size: 16px;
-          line-height: 1.8;
-        }
-        .status-badge {
-          display: inline-block;
-          background: ${BRAND_COLORS.primary};
-          color: ${BRAND_COLORS.accent};
-          padding: 10px 24px;
-          border-radius: 25px;
-          font-weight: 600;
-          font-size: 14px;
-          text-transform: uppercase;
-          letter-spacing: 1px;
-          margin: 20px 0;
-        }
-        .details-card {
-          background: ${BRAND_COLORS.cardBg};
-          border: 1px solid ${BRAND_COLORS.cardBorder};
-          border-radius: 10px;
-          padding: 25px;
-          margin: 30px 0;
-          text-align: left;
-        }
-        .details-card h3 {
-          margin: 0 0 20px 0;
-          font-size: 18px;
-          font-weight: 600;
-          color: ${BRAND_COLORS.primary};
-          text-align: center;
-        }
-        .detail-row {
-          display: flex;
-          padding: 12px 0;
-          border-bottom: 1px solid ${BRAND_COLORS.cardBorder};
-        }
-        .detail-row:last-child {
-          border-bottom: none;
-        }
-        .detail-label {
-          font-weight: 600;
-          color: ${BRAND_COLORS.textPrimary};
-          min-width: 100px;
-          flex-shrink: 0;
-        }
-        .detail-value {
-          color: ${BRAND_COLORS.textSecondary};
-          flex: 1;
-        }
-        .button {
-          display: inline-block;
-          background: ${BRAND_COLORS.primary};
-          color: ${BRAND_COLORS.accent};
-          padding: 14px 35px;
-          text-decoration: none;
-          border-radius: 8px;
-          font-weight: 600;
-          font-size: 15px;
-          margin-top: 25px;
-          transition: all 0.3s ease;
-        }
-        .button:hover {
-          background: ${BRAND_COLORS.secondary};
-        }
-        .footer {
-          padding: 30px;
-          background: ${BRAND_COLORS.cardBg};
-          text-align: center;
-          color: ${BRAND_COLORS.textSecondary};
-          font-size: 14px;
-          border-top: 1px solid ${BRAND_COLORS.cardBorder};
-        }
-        .footer-text {
-          margin: 5px 0;
-        }
-        .footer-signature {
-          font-weight: 600;
-          color: ${BRAND_COLORS.textPrimary};
-          margin-bottom: 10px;
-        }
-        .footer-note {
-          font-size: 12px;
-          color: #999999;
-          margin-top: 15px;
-        }
-
-        /* Mobile responsive */
-        @media only screen and (max-width: 600px) {
-          .email-wrapper {
-            padding: 20px 10px;
-          }
-          .content {
-            padding: 30px 20px;
-          }
-          .details-card {
-            padding: 20px 15px;
-          }
-          .detail-row {
-            flex-direction: column;
-          }
-          .detail-label {
-            min-width: auto;
-            margin-bottom: 5px;
-          }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="email-wrapper">
-        <div class="container">
-          <div class="header">
-            <h1>Overtime Request Approved</h1>
-          </div>
-
-          <div class="content">
-            <p>Hi <strong>${user.name}</strong>,</p>
-
-            <div class="status-badge">
-              APPROVED
-            </div>
-
-            <p>Your overtime request has been approved and the hours have been added to your balance.</p>
-
-            <div class="details-card">
-              <h3>Request Details</h3>
-
-              <div class="detail-row">
-                <div class="detail-label">Date:</div>
-                <div class="detail-value">${formattedDate}</div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Hours:</div>
-                <div class="detail-value">${overtimeHours} hours</div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Task:</div>
-                <div class="detail-value">${description}</div>
-              </div>
-            </div>
-
-            ${
-              process.env.FRONTEND_URL
-                ? `
-              <a href="${process.env.FRONTEND_URL}/overtime/history" class="button">
-                View Overtime History
-              </a>
-            `
-                : ""
-            }
-          </div>
-
-          <div class="footer">
-            <div class="footer-signature">HR Team</div>
-            <div class="footer-text">Human Resources Department</div>
-            <div class="footer-note">This is an automated notification from the HR system.</div>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
+  const bodyHtml = `
+    <p style="text-align: center;">Hi <strong>${escapeHtml(user.name)}</strong>,</p>
+    <p style="text-align: center;">${renderStatusBadge("APPROVED", {
+      bg: POSITIVE_COLORS.badgeBg,
+    })}</p>
+    <p style="text-align: center;">Your overtime request has been approved and the hours have been added to your balance.</p>
+    ${renderInfoCard({
+      title: "Request Details",
+      rows: [
+        { label: "Date:", value: formattedDate },
+        { label: "Hours:", value: `${overtimeHours} hours` },
+        { label: "Task:", value: description },
+      ],
+    })}
+    ${
+      process.env.FRONTEND_URL
+        ? renderActionButtons([
+            renderButton({
+              href: `${process.env.FRONTEND_URL}/overtime/history`,
+              text: "View Overtime History",
+              bg: BRAND_COLORS.primary,
+            }),
+          ])
+        : ""
+    }
   `;
+
+  const html = renderEmailDocument({
+    title: "Overtime Request Approved",
+    headerTitle: "Overtime Request Approved",
+    colors: {
+      headerBg: POSITIVE_COLORS.headerBg,
+      headerBg2: POSITIVE_COLORS.headerBg2,
+      primary: BRAND_COLORS.primary,
+      secondary: BRAND_COLORS.secondary,
+      accent: BRAND_COLORS.accent,
+      cardBg: BRAND_COLORS.cardBg,
+      cardBorder: BRAND_COLORS.cardBorder,
+      textPrimary: BRAND_COLORS.textPrimary,
+      textSecondary: BRAND_COLORS.textSecondary,
+    },
+    bodyHtml,
+    footerHtml: renderFooter({
+      companyName: "PT Rhayakan Film Indonesia",
+      note: "This is an automated notification from the HR system.",
+    }),
+  });
 
   return sendEmail({
     to: user.email,
@@ -500,191 +359,59 @@ export async function sendOvertimeRejectedEmail(user, overtimeRequest, { smtpPro
     day: "numeric",
   });
 
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <style>
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-          line-height: 1.6;
-          color: ${BRAND_COLORS.textPrimary};
-          margin: 0;
-          padding: 0;
-          background-color: #F9F9F9;
-        }
-        .email-wrapper {
-          width: 100%;
-          background-color: #F9F9F9;
-          padding: 40px 20px;
-        }
-        .container {
-          max-width: 600px;
-          margin: 0 auto;
-          background: ${BRAND_COLORS.accent};
-          border-radius: 12px;
-          overflow: hidden;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        .header {
-          background: linear-gradient(135deg, #DC3545 0%, ${BRAND_COLORS.secondary} 100%);
-          color: ${BRAND_COLORS.accent};
-          padding: 40px 30px;
-          text-align: center;
-        }
-        .header h1 {
-          margin: 0;
-          font-size: 28px;
-          font-weight: 600;
-        }
-        .content {
-          padding: 40px 30px;
-          text-align: center;
-        }
-        .content p {
-          margin: 0 0 20px 0;
-          font-size: 16px;
-        }
-        .status-badge {
-          display: inline-block;
-          background: #DC3545;
-          color: white;
-          padding: 10px 24px;
-          border-radius: 25px;
-          font-weight: 600;
-          font-size: 14px;
-          text-transform: uppercase;
-          letter-spacing: 1px;
-          margin: 20px 0;
-        }
-        .details-card {
-          background: ${BRAND_COLORS.cardBg};
-          border: 1px solid ${BRAND_COLORS.cardBorder};
-          border-radius: 10px;
-          padding: 25px;
-          margin: 30px 0;
-          text-align: left;
-        }
-        .details-card h3 {
-          margin: 0 0 20px 0;
-          font-size: 18px;
-          font-weight: 600;
-          color: #DC3545;
-          text-align: center;
-        }
-        .detail-row {
-          display: flex;
-          padding: 12px 0;
-          border-bottom: 1px solid ${BRAND_COLORS.cardBorder};
-        }
-        .detail-row:last-child {
-          border-bottom: none;
-        }
-        .detail-label {
-          font-weight: 600;
-          color: ${BRAND_COLORS.textPrimary};
-          min-width: 100px;
-        }
-        .detail-value {
-          color: ${BRAND_COLORS.textSecondary};
-          flex: 1;
-        }
-        .reason-box {
-          background: #FFF3CD;
-          border: 1px solid #FFE69C;
-          border-radius: 8px;
-          padding: 15px;
-          margin-top: 20px;
-          text-align: left;
-        }
-        .reason-box strong {
-          color: ${BRAND_COLORS.textPrimary};
-        }
-        .footer {
-          padding: 30px;
-          background: ${BRAND_COLORS.cardBg};
-          text-align: center;
-          color: ${BRAND_COLORS.textSecondary};
-          font-size: 14px;
-          border-top: 1px solid ${BRAND_COLORS.cardBorder};
-        }
-        .footer-signature {
-          font-weight: 600;
-          color: ${BRAND_COLORS.textPrimary};
-          margin-bottom: 10px;
-        }
-
-        @media only screen and (max-width: 600px) {
-          .detail-row {
-            flex-direction: column;
-          }
-          .detail-label {
-            margin-bottom: 5px;
-          }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="email-wrapper">
-        <div class="container">
-          <div class="header">
-            <h1>Overtime Request Not Approved</h1>
-          </div>
-
-          <div class="content">
-            <p>Hi <strong>${user.name}</strong>,</p>
-
-            <div class="status-badge">
-              NOT APPROVED
-            </div>
-
-            <p>Your overtime request has not been approved.</p>
-
-            <div class="details-card">
-              <h3>Request Details</h3>
-
-              <div class="detail-row">
-                <div class="detail-label">Date:</div>
-                <div class="detail-value">${formattedDate}</div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Hours:</div>
-                <div class="detail-value">${overtimeHours} hours</div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Task:</div>
-                <div class="detail-value">${description}</div>
-              </div>
-
-              ${
-                overtimeRequest.rejectionReason ||
-                overtimeRequest.supervisorComment
-                  ? `
-                <div class="reason-box">
-                  <strong>Reason:</strong><br>
-                  ${overtimeRequest.rejectionReason || overtimeRequest.supervisorComment}
-                </div>
-              `
-                  : ""
-              }
-            </div>
-
-            <p>If you have questions, please contact your supervisor.</p>
-          </div>
-
-          <div class="footer">
-            <div class="footer-signature">HR Team</div>
-            <div class="footer-text">Human Resources Department</div>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
+  const bodyHtml = `
+    <p style="text-align: center;">Hi <strong>${escapeHtml(user.name)}</strong>,</p>
+    <p style="text-align: center;">${renderStatusBadge("NOT APPROVED", {
+      bg: "#DC3545",
+    })}</p>
+    <p style="text-align: center;">Your overtime request has not been approved.</p>
+    ${renderInfoCard({
+      title: "Request Details",
+      titleColor: "#DC3545",
+      rows: [
+        { label: "Date:", value: formattedDate },
+        { label: "Hours:", value: `${overtimeHours} hours` },
+        { label: "Task:", value: description },
+      ],
+    })}
+    ${
+      overtimeRequest.rejectionReason || overtimeRequest.supervisorComment
+        ? renderCalloutBox({
+            label: "Reason:",
+            bodyHtml: escapeHtml(
+              overtimeRequest.rejectionReason ||
+                overtimeRequest.supervisorComment,
+            ),
+            bg: "#FFF3CD",
+            border: "#FFE69C",
+            textColor: BRAND_COLORS.textPrimary,
+            labelColor: BRAND_COLORS.textPrimary,
+          })
+        : ""
+    }
+    <p style="text-align: center;">If you have questions, please contact your supervisor.</p>
   `;
+
+  const html = renderEmailDocument({
+    title: "Overtime Request Not Approved",
+    headerTitle: "Overtime Request Not Approved",
+    colors: {
+      headerBg: "#DC3545",
+      headerBg2: BRAND_COLORS.secondary,
+      primary: BRAND_COLORS.primary,
+      secondary: BRAND_COLORS.secondary,
+      accent: BRAND_COLORS.accent,
+      cardBg: BRAND_COLORS.cardBg,
+      cardBorder: BRAND_COLORS.cardBorder,
+      textPrimary: BRAND_COLORS.textPrimary,
+      textSecondary: BRAND_COLORS.textSecondary,
+    },
+    bodyHtml,
+    footerHtml: renderFooter({
+      companyName: "PT Rhayakan Film Indonesia",
+      note: "This is an automated notification from the HR system.",
+    }),
+  });
 
   return sendEmail({
     to: user.email,
@@ -699,183 +426,58 @@ export async function sendOvertimeRejectedEmail(user, overtimeRequest, { smtpPro
  * Send welcome email
  */
 export async function sendWelcomeEmail(user, tempPassword) {
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <style>
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-          line-height: 1.6;
-          color: ${BRAND_COLORS.textPrimary};
-          margin: 0;
-          padding: 0;
-          background-color: #F9F9F9;
-        }
-        .email-wrapper {
-          width: 100%;
-          background-color: #F9F9F9;
-          padding: 40px 20px;
-        }
-        .container {
-          max-width: 600px;
-          margin: 0 auto;
-          background: ${BRAND_COLORS.accent};
-          border-radius: 12px;
-          overflow: hidden;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        .header {
-          background: linear-gradient(135deg, ${BRAND_COLORS.primary} 0%, ${BRAND_COLORS.secondary} 100%);
-          color: ${BRAND_COLORS.accent};
-          padding: 40px 30px;
-          text-align: center;
-        }
-        .header h1 {
-          margin: 0;
-          font-size: 28px;
-          font-weight: 600;
-        }
-        .content {
-          padding: 40px 30px;
-          text-align: center;
-        }
-        .content p {
-          margin: 0 0 20px 0;
-          font-size: 16px;
-        }
-        .credentials-card {
-          background: ${BRAND_COLORS.cardBg};
-          border: 1px solid ${BRAND_COLORS.cardBorder};
-          border-radius: 10px;
-          padding: 25px;
-          margin: 30px 0;
-          text-align: left;
-        }
-        .credentials-card h3 {
-          margin: 0 0 20px 0;
-          font-size: 18px;
-          font-weight: 600;
-          color: ${BRAND_COLORS.primary};
-          text-align: center;
-        }
-        .credential-row {
-          padding: 12px 0;
-          border-bottom: 1px solid ${BRAND_COLORS.cardBorder};
-        }
-        .credential-row:last-child {
-          border-bottom: none;
-        }
-        .credential-label {
-          font-weight: 600;
-          color: ${BRAND_COLORS.textPrimary};
-          display: block;
-          margin-bottom: 5px;
-        }
-        .credential-value {
-          color: ${BRAND_COLORS.textSecondary};
-          font-family: monospace;
-          background: white;
-          padding: 8px 12px;
-          border-radius: 5px;
-          display: inline-block;
-          font-size: 14px;
-        }
-        .warning-box {
-          background: #FFF3CD;
-          border: 1px solid #FFE69C;
-          border-radius: 8px;
-          padding: 15px;
-          margin: 25px 0;
-          text-align: left;
-        }
-        .warning-box strong {
-          color: ${BRAND_COLORS.textPrimary};
-        }
-        .button {
-          display: inline-block;
-          background: ${BRAND_COLORS.primary};
-          color: white;
-          padding: 14px 35px;
-          text-decoration: none;
-          border-radius: 8px;
-          font-weight: 600;
-          font-size: 15px;
-          margin-top: 25px;
-        }
-        .footer {
-          padding: 30px;
-          background: ${BRAND_COLORS.cardBg};
-          text-align: center;
-          color: ${BRAND_COLORS.textSecondary};
-          font-size: 14px;
-          border-top: 1px solid ${BRAND_COLORS.cardBorder};
-        }
-        .footer-signature {
-          font-weight: 600;
-          color: ${BRAND_COLORS.textPrimary};
-          margin-bottom: 10px;
-        }
-      </style>
-    </head>
-    <body>
-      <div class="email-wrapper">
-        <div class="container">
-          <div class="header">
-            <h1>Welcome to the Team!</h1>
-          </div>
-
-          <div class="content">
-            <p>Hi <strong>${user.name}</strong>,</p>
-            <p>Welcome! Your HR system account has been created.</p>
-
-            <div class="credentials-card">
-              <h3>Your Login Credentials</h3>
-
-              <div class="credential-row">
-                <div class="credential-label">Username:</div>
-                <div class="credential-value">${user.username}</div>
-              </div>
-
-              <div class="credential-row">
-                <div class="credential-label">Email:</div>
-                <div class="credential-value">${user.email}</div>
-              </div>
-
-              <div class="credential-row">
-                <div class="credential-label">Temporary Password:</div>
-                <div class="credential-value">${tempPassword}</div>
-              </div>
-            </div>
-
-            <div class="warning-box">
-              <strong>Important:</strong> Please change your password after your first login for security purposes.
-            </div>
-
-            ${
-              process.env.FRONTEND_URL
-                ? `
-              <a href="${process.env.FRONTEND_URL}/login" class="button">
-                Login to HR System
-              </a>
-            `
-                : ""
-            }
-
-            <p style="margin-top: 30px;">If you have any questions, please contact the HR department.</p>
-          </div>
-
-          <div class="footer">
-            <div class="footer-signature">HR Team</div>
-            <div class="footer-text">Human Resources Department</div>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
+  const bodyHtml = `
+    <p style="text-align: center;">Hi <strong>${escapeHtml(user.name)}</strong>,</p>
+    <p style="text-align: center;">Welcome! Your HR system account has been created.</p>
+    ${renderInfoCard({
+      title: "Your Login Credentials",
+      rows: [
+        { label: "Username:", value: user.username, mono: true },
+        { label: "Email:", value: user.email, mono: true },
+        { label: "Temporary Password:", value: tempPassword, mono: true },
+      ],
+    })}
+    ${renderCalloutBox({
+      bodyHtml:
+        "<strong>Important:</strong> Please change your password after your first login for security purposes.",
+      bg: "#FFF3CD",
+      border: "#FFE69C",
+      textColor: BRAND_COLORS.textPrimary,
+    })}
+    ${
+      process.env.FRONTEND_URL
+        ? renderActionButtons([
+            renderButton({
+              href: `${process.env.FRONTEND_URL}/login`,
+              text: "Login to HR System",
+              bg: BRAND_COLORS.primary,
+            }),
+          ])
+        : ""
+    }
+    <p style="text-align: center; margin-top: 30px;">If you have any questions, please contact the HR department.</p>
   `;
+
+  const html = renderEmailDocument({
+    title: "Welcome - HR System Access",
+    headerTitle: "Welcome to the Team!",
+    colors: {
+      headerBg: POSITIVE_COLORS.headerBg,
+      headerBg2: POSITIVE_COLORS.headerBg2,
+      primary: BRAND_COLORS.primary,
+      secondary: BRAND_COLORS.secondary,
+      accent: BRAND_COLORS.accent,
+      cardBg: BRAND_COLORS.cardBg,
+      cardBorder: BRAND_COLORS.cardBorder,
+      textPrimary: BRAND_COLORS.textPrimary,
+      textSecondary: BRAND_COLORS.textSecondary,
+    },
+    bodyHtml,
+    footerHtml: renderFooter({
+      companyName: "PT Rhayakan Film Indonesia",
+      note: "This is an automated notification from the HR system.",
+    }),
+  });
 
   return sendEmail({
     to: user.email,
@@ -897,276 +499,81 @@ export async function sendOvertimeReminderEmail({
   periodLabel,
   systemUrl,
 }) {
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <style>
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-          line-height: 1.6;
-          color: ${BRAND_COLORS.textPrimary};
-          margin: 0;
-          padding: 0;
-          background-color: #F9F9F9;
-        }
-        .email-wrapper {
-          width: 100%;
-          background-color: #F9F9F9;
-          padding: 40px 20px;
-        }
-        .container {
-          max-width: 600px;
-          margin: 0 auto;
-          background: ${BRAND_COLORS.accent};
-          border-radius: 12px;
-          overflow: hidden;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        .header {
-          background: linear-gradient(135deg, ${BRAND_COLORS.primary} 0%, ${BRAND_COLORS.secondary} 100%);
-          color: ${BRAND_COLORS.accent};
-          padding: 40px 30px;
-          text-align: center;
-        }
-        .header h1 {
-          margin: 0;
-          font-size: 24px;
-          font-weight: 600;
-        }
-        .urgent-badge {
-          display: inline-block;
-          background: #DC3545;
-          color: white;
-          padding: 8px 20px;
-          border-radius: 20px;
-          font-weight: 600;
-          font-size: 13px;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          margin-bottom: 10px;
-        }
-        .content {
-          padding: 40px 30px;
-        }
-        .content p {
-          margin: 0 0 16px 0;
-          font-size: 15px;
-          line-height: 1.6;
-        }
-        .greeting {
-          font-size: 16px;
-          margin-bottom: 20px;
-        }
-        .info-card {
-          background: ${BRAND_COLORS.cardBg};
-          border: 1px solid ${BRAND_COLORS.cardBorder};
-          border-radius: 10px;
-          padding: 25px;
-          margin: 25px 0;
-        }
-        .info-card h3 {
-          margin: 0 0 15px 0;
-          font-size: 16px;
-          font-weight: 600;
-          color: ${BRAND_COLORS.primary};
-        }
-        .info-row {
-          display: flex;
-          padding: 10px 0;
-          border-bottom: 1px solid ${BRAND_COLORS.cardBorder};
-        }
-        .info-row:last-child {
-          border-bottom: none;
-        }
-        .info-label {
-          font-weight: 600;
-          color: ${BRAND_COLORS.textPrimary};
-          min-width: 120px;
-        }
-        .info-value {
-          color: ${BRAND_COLORS.textSecondary};
-          flex: 1;
-        }
-        .warning-box {
-          background: #FFF3CD;
-          border: 2px solid #FFE69C;
-          border-radius: 8px;
-          padding: 20px;
-          margin: 25px 0;
-        }
-        .warning-box h3 {
-          margin: 0 0 10px 0;
-          font-size: 15px;
-          font-weight: 600;
-          color: #856404;
-          display: flex;
-          align-items: center;
-        }
-        .warning-icon {
-          width: 20px;
-          height: 20px;
-          background: #FFC107;
-          border-radius: 50%;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          margin-right: 8px;
-          font-weight: bold;
-          color: ${BRAND_COLORS.secondary};
-        }
-        .checklist {
-          margin: 15px 0;
-          padding-left: 0;
-          list-style: none;
-        }
-        .checklist li {
-          padding: 8px 0;
-          padding-left: 30px;
-          position: relative;
-        }
-        .checklist li:before {
-          content: "✓";
-          position: absolute;
-          left: 0;
-          color: #28A745;
-          font-weight: bold;
-          font-size: 18px;
-        }
-        .button {
-          display: inline-block;
-          background: ${BRAND_COLORS.primary};
-          color: white;
-          padding: 14px 35px;
-          text-decoration: none;
-          border-radius: 8px;
-          font-weight: 600;
-          font-size: 15px;
-          margin-top: 25px;
-          text-align: center;
-        }
-        .button:hover {
-          background: ${BRAND_COLORS.secondary};
-        }
-        .footer {
-          padding: 30px;
-          background: ${BRAND_COLORS.cardBg};
-          text-align: center;
-          color: ${BRAND_COLORS.textSecondary};
-          font-size: 14px;
-          border-top: 1px solid ${BRAND_COLORS.cardBorder};
-        }
-        .footer-signature {
-          font-weight: 600;
-          color: ${BRAND_COLORS.textPrimary};
-          margin-bottom: 10px;
-        }
-
-        @media only screen and (max-width: 600px) {
-          .email-wrapper {
-            padding: 20px 10px;
-          }
-          .content {
-            padding: 30px 20px;
-          }
-          .info-card {
-            padding: 20px 15px;
-          }
-          .info-row {
-            flex-direction: column;
-          }
-          .info-label {
-            min-width: auto;
-            margin-bottom: 5px;
-          }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="email-wrapper">
-        <div class="container">
-          <div class="header">
-            <div class="urgent-badge">OVERTIME REMINDER</div>
-            <h1>Batas Akhir Submit Lembur</h1>
-          </div>
-
-          <div class="content">
-            <p class="greeting">Kepada <strong>${employeeName}</strong>,</p>
-
-            <p>Dengan hormat,</p>
-
-            <p>
-              Kami informasikan bahwa <strong>hari ini, ${recapDate}</strong>, adalah
-              <strong>batas akhir</strong> untuk submit lembur periode payroll bulan ini.
-            </p>
-
-            <div class="info-card">
-              <h3>PERIODE LEMBUR</h3>
-
-              <div class="info-row">
-                <div class="info-label">Periode:</div>
-                <div class="info-value">${periodLabel}</div>
-              </div>
-
-              <div class="info-row">
-                <div class="info-label">Dari Tanggal:</div>
-                <div class="info-value">${fromDate}</div>
-              </div>
-
-              <div class="info-row">
-                <div class="info-label">Sampai Tanggal:</div>
-                <div class="info-value">${toDate}</div>
-              </div>
-            </div>
-
-            <div class="warning-box">
-              <h3>
-                <span class="warning-icon">!</span>
-                CATATAN - ABAIKAN JIKA SUDAH MENGAJUKAN OVERTIME
-              </h3>
-
-              <ul class="checklist">
-                <li>Semua lembur dalam periode tersebut <strong>HARUS sudah disubmit hari ini</strong></li>
-                <li>Setelah hari ini, submit lembur untuk tanggal-tanggal tersebut akan <strong>DIKUNCI</strong></li>
-                <li>Pastikan semua supervisor/atasan sudah <strong>menyetujui lembur Anda</strong></li>
-                <li>Lembur yang belum diapprove <strong>tidak akan masuk payroll</strong></li>
-              </ul>
-            </div>
-
-            <p style="text-align: center; margin-top: 30px;">
-              <strong>Submit lembur Anda sekarang:</strong>
-            </p>
-
-            <p style="text-align: center;">
-              <a href="${systemUrl}/overtime/submit" class="button">
-                Submit Lembur Sekarang
-              </a>
-            </p>
-
-            <p style="margin-top: 30px; font-size: 14px; color: ${BRAND_COLORS.textSecondary};">
-              Jika Anda sudah submit semua lembur dan sudah diapprove atasan,
-              Anda tidak perlu melakukan tindakan apapun.
-            </p>
-
-            <p style="margin-top: 20px; font-size: 14px; color: ${BRAND_COLORS.textSecondary};">
-              Jika ada pertanyaan atau kendala, segera hubungi departemen HR.
-            </p>
-          </div>
-
-          <div class="footer">
-            <div class="footer-signature">Human Resources Department</div>
-            <div>PT Rhayakan Film Indonesia</div>
-            <div style="margin-top: 15px; font-size: 12px; color: #999;">
-              Email otomatis dari HR System. Mohon tidak membalas email ini.
-            </div>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
+  const bodyHtml = `
+    <p style="text-align: center;">${renderStatusBadge("OVERTIME REMINDER", {
+      bg: BRAND_COLORS.primary,
+    })}</p>
+    <p>Kepada <strong>${escapeHtml(employeeName)}</strong>,</p>
+    <p>Dengan hormat,</p>
+    <p>
+      Kami informasikan bahwa <strong>hari ini, ${recapDate}</strong>, adalah
+      <strong>batas akhir</strong> untuk submit lembur periode payroll bulan ini.
+    </p>
+    ${renderInfoCard({
+      title: "PERIODE LEMBUR",
+      rows: [
+        { label: "Periode:", value: periodLabel },
+        { label: "Dari Tanggal:", value: fromDate },
+        { label: "Sampai Tanggal:", value: toDate },
+      ],
+    })}
+    ${renderCalloutBox({
+      label: "! CATATAN - ABAIKAN JIKA SUDAH MENGAJUKAN OVERTIME",
+      bodyHtml: renderChecklist(
+        [
+          "Semua lembur dalam periode tersebut <strong>HARUS sudah disubmit hari ini</strong>",
+          "Setelah hari ini, submit lembur untuk tanggal-tanggal tersebut akan <strong>DIKUNCI</strong>",
+          "Pastikan semua supervisor/atasan sudah <strong>menyetujui lembur Anda</strong>",
+          "Lembur yang belum diapprove <strong>tidak akan masuk payroll</strong>",
+        ],
+        { checkColor: "#856404", glyph: "&#9650;" },
+      ),
+      bg: "#FFF3CD",
+      border: "#FFE69C",
+      textColor: BRAND_COLORS.textPrimary,
+      labelColor: "#856404",
+    })}
+    <p style="text-align: center; margin-top: 30px;">
+      <strong>Submit lembur Anda sekarang:</strong>
+    </p>
+    ${renderActionButtons([
+      renderButton({
+        href: `${systemUrl}/overtime/submit`,
+        text: "Submit Lembur Sekarang",
+        bg: BRAND_COLORS.primary,
+      }),
+    ])}
+    <p style="margin-top: 30px; font-size: 14px; color: ${BRAND_COLORS.textSecondary};">
+      Jika Anda sudah submit semua lembur dan sudah diapprove atasan,
+      Anda tidak perlu melakukan tindakan apapun.
+    </p>
+    <p style="margin-top: 20px; font-size: 14px; color: ${BRAND_COLORS.textSecondary};">
+      Jika ada pertanyaan atau kendala, segera hubungi departemen HR.
+    </p>
   `;
+
+  const html = renderEmailDocument({
+    title: "Batas Akhir Submit Lembur",
+    headerTitle: "Batas Akhir Submit Lembur",
+    lang: "id",
+    colors: {
+      headerBg: BRAND_COLORS.primary,
+      headerBg2: BRAND_COLORS.secondary,
+      primary: BRAND_COLORS.primary,
+      secondary: BRAND_COLORS.secondary,
+      accent: BRAND_COLORS.accent,
+      cardBg: BRAND_COLORS.cardBg,
+      cardBorder: BRAND_COLORS.cardBorder,
+      textPrimary: BRAND_COLORS.textPrimary,
+      textSecondary: BRAND_COLORS.textSecondary,
+    },
+    bodyHtml,
+    footerHtml: renderFooter({
+      signature: "",
+      companyName: "PT Rhayakan Film Indonesia",
+      note: "Email otomatis dari HR System. Mohon tidak membalas email ini.",
+    }),
+  });
 
   const text = `
 [OVERTIME REMINDER] Batas Akhir Submit Lembur - ${recapDate}
@@ -1223,30 +630,22 @@ export async function sendOvertimeRequestNotification(
 
   // Format all overtime dates from entries
   let overtimeDatesText = "";
-  let overtimeDatesHtml = "";
+  let overtimeDatesRows = [];
 
   if (overtimeRequest.entries && overtimeRequest.entries.length > 0) {
     const sortedEntries = overtimeRequest.entries.sort(
       (a, b) => new Date(a.date) - new Date(b.date),
     );
-    overtimeDatesHtml = sortedEntries
-      .map(
-        (entry) => `
-      <div class="detail-row">
-        <div class="detail-label">${new Date(entry.date).toLocaleDateString(
-          "en-US",
-          {
-            weekday: "short",
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-          },
-        )}:</div>
-        <div class="detail-value"><strong>${entry.hours} hours</strong> - ${entry.description}</div>
-      </div>
-    `,
-      )
-      .join("");
+    overtimeDatesRows = sortedEntries.map((entry) => ({
+      label: `${new Date(entry.date).toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })}:`,
+      value: `<strong>${escapeHtml(entry.hours)} hours</strong> - ${escapeHtml(entry.description)}`,
+      raw: true,
+    }));
 
     overtimeDatesText = sortedEntries
       .map(
@@ -1256,234 +655,79 @@ export async function sendOvertimeRequestNotification(
       .join("\n");
   }
 
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <style>
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-          line-height: 1.6;
-          color: ${BRAND_COLORS.textPrimary};
-          margin: 0;
-          padding: 0;
-          background-color: #F9F9F9;
-        }
-        .email-wrapper {
-          width: 100%;
-          background-color: #F9F9F9;
-          padding: 40px 20px;
-        }
-        .container {
-          max-width: 600px;
-          margin: 0 auto;
-          background: ${BRAND_COLORS.accent};
-          border-radius: 12px;
-          overflow: hidden;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        .header {
-          background: linear-gradient(135deg, ${BRAND_COLORS.primary} 0%, ${BRAND_COLORS.secondary} 100%);
-          color: ${BRAND_COLORS.accent};
-          padding: 40px 30px;
-          text-align: center;
-        }
-        .header h1 {
-          margin: 0;
-          font-size: 28px;
-          font-weight: 600;
-          letter-spacing: -0.5px;
-        }
-        .content {
-          padding: 40px 30px;
-        }
-        .content p {
-          margin: 0 0 20px 0;
-          font-size: 16px;
-          line-height: 1.8;
-        }
-        .status-badge {
-          display: inline-block;
-          background: #FFC107;
-          color: ${BRAND_COLORS.secondary};
-          padding: 10px 24px;
-          border-radius: 25px;
-          font-weight: 600;
-          font-size: 14px;
-          text-transform: uppercase;
-          letter-spacing: 1px;
-          margin: 20px 0;
-        }
-        .employee-card {
-          background: ${BRAND_COLORS.cardBg};
-          border: 1px solid ${BRAND_COLORS.cardBorder};
-          border-radius: 10px;
-          padding: 25px;
-          margin: 30px 0;
-        }
-        .employee-card h3 {
-          margin: 0 0 20px 0;
-          font-size: 18px;
-          font-weight: 600;
-          color: ${BRAND_COLORS.primary};
-          text-align: center;
-        }
-        .detail-row {
-          display: flex;
-          padding: 12px 0;
-          border-bottom: 1px solid ${BRAND_COLORS.cardBorder};
-        }
-        .detail-row:last-child {
-          border-bottom: none;
-        }
-        .detail-label {
-          font-weight: 600;
-          color: ${BRAND_COLORS.textPrimary};
-          min-width: 140px;
-          flex-shrink: 0;
-        }
-        .detail-value {
-          color: ${BRAND_COLORS.textSecondary};
-          flex: 1;
-        }
-        .action-buttons {
-          text-align: center;
-          margin: 30px 0;
-        }
-        .button {
-          display: inline-block;
-          padding: 14px 35px;
-          text-decoration: none;
-          border-radius: 8px;
-          font-weight: 600;
-          font-size: 15px;
-          margin: 5px;
-          transition: all 0.3s ease;
-        }
-        .button-review {
-          background: ${BRAND_COLORS.primary};
-          color: white;
-        }
-        .button-review:hover {
-          background: ${BRAND_COLORS.secondary};
-        }
-        .footer {
-          padding: 30px;
-          background: ${BRAND_COLORS.cardBg};
-          text-align: center;
-          color: ${BRAND_COLORS.textSecondary};
-          font-size: 14px;
-          border-top: 1px solid ${BRAND_COLORS.cardBorder};
-        }
-        .footer-signature {
-          font-weight: 600;
-          color: ${BRAND_COLORS.textPrimary};
-          margin-bottom: 10px;
-        }
-
-        @media only screen and (max-width: 600px) {
-          .email-wrapper { padding: 20px 10px; }
-          .content { padding: 30px 20px; }
-          .employee-card { padding: 20px 15px; }
-          .detail-row { flex-direction: column; }
-          .detail-label { min-width: auto; margin-bottom: 5px; }
-          .button { display: block; margin: 10px 0; }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="email-wrapper">
-        <div class="container">
-          <div class="header">
-            <h1>Overtime Approval Request</h1>
-            <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">
-              New overtime request awaiting your approval
-            </p>
-          </div>
-
-          <div class="content">
-            <p>Dear <strong>${approver.name}</strong>,</p>
-
-            <p>You have received a new overtime request that requires your approval:</p>
-
-            <div style="text-align: center;">
-              <div class="status-badge">PENDING APPROVAL</div>
-            </div>
-
-            <div class="employee-card">
-              <h3>Employee Information</h3>
-
-              <div class="detail-row">
-                <div class="detail-label">Employee:</div>
-                <div class="detail-value"><strong>${employee.name}</strong></div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Employee ID:</div>
-                <div class="detail-value">${employee.nip || employee.id}</div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Division:</div>
-                <div class="detail-value">${employee.division?.name || "N/A"}</div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Role:</div>
-                <div class="detail-value">${employee.role?.name || "N/A"}</div>
-              </div>
-            </div>
-
-            <div class="employee-card">
-              <h3>Overtime Details</h3>
-
-              ${overtimeDatesHtml}
-
-              <div class="detail-row" style="border-top: 2px solid ${BRAND_COLORS.primary}; margin-top: 15px; padding-top: 15px;">
-                <div class="detail-label">Total Hours:</div>
-                <div class="detail-value"><strong style="color: ${BRAND_COLORS.primary}; font-size: 18px;">${overtimeHours} hours</strong></div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Submitted At:</div>
-                <div class="detail-value">${new Date(
-                  overtimeRequest.submittedAt || overtimeRequest.createdAt,
-                ).toLocaleString("en-US", {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                })}</div>
-              </div>
-            </div>
-
-            <p style="text-align: center; margin-top: 30px;">
-              <strong>Please review and approve this request:</strong>
-            </p>
-
-            <div class="action-buttons">
-              <a href="${systemUrl}/overtime/approval" class="button button-review">
-                Review Request
-              </a>
-            </div>
-
-            <p style="margin-top: 30px; font-size: 14px; color: ${BRAND_COLORS.textSecondary}; text-align: center;">
-              Please process this request at your earliest convenience to ensure timely payroll processing.
-            </p>
-          </div>
-
-          <div class="footer">
-            <div class="footer-signature">Human Resources Department</div>
-            <div>PT Rhayakan Film Indonesia</div>
-            <div style="margin-top: 15px; font-size: 12px; color: #999;">
-              This is an automated email from HR System. Please do not reply to this email.
-            </div>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
+  const bodyHtml = `
+    <p>Dear <strong>${escapeHtml(approver.name)}</strong>,</p>
+    <p>You have received a new overtime request that requires your approval:</p>
+    <p style="text-align: center;">${renderStatusBadge("PENDING APPROVAL", {
+      bg: "#FFC107",
+      color: BRAND_COLORS.secondary,
+    })}</p>
+    ${renderInfoCard({
+      title: "Employee Information",
+      rows: [
+        { label: "Employee:", value: `<strong>${escapeHtml(employee.name)}</strong>`, raw: true },
+        { label: "Employee ID:", value: employee.nip || employee.id },
+        { label: "Division:", value: employee.division?.name || "N/A" },
+        { label: "Role:", value: employee.role?.name || "N/A" },
+      ],
+    })}
+    ${renderInfoCard({
+      title: "Overtime Details",
+      rows: [
+        ...overtimeDatesRows,
+        {
+          label: "Total Hours:",
+          value: `<strong style="color: ${BRAND_COLORS.primary}; font-size: 18px;">${escapeHtml(overtimeHours)} hours</strong>`,
+          raw: true,
+        },
+        {
+          label: "Submitted At:",
+          value: new Date(
+            overtimeRequest.submittedAt || overtimeRequest.createdAt,
+          ).toLocaleString("en-US", {
+            dateStyle: "medium",
+            timeStyle: "short",
+          }),
+        },
+      ],
+    })}
+    <p style="text-align: center; margin-top: 30px;">
+      <strong>Please review and approve this request:</strong>
+    </p>
+    ${renderActionButtons([
+      renderButton({
+        href: `${systemUrl}/overtime/approval`,
+        text: "Review Request",
+        bg: BRAND_COLORS.primary,
+      }),
+    ])}
+    <p style="margin-top: 30px; font-size: 14px; color: ${BRAND_COLORS.textSecondary}; text-align: center;">
+      Please process this request at your earliest convenience to ensure timely payroll processing.
+    </p>
   `;
+
+  const html = renderEmailDocument({
+    title: "Overtime Approval Request",
+    headerTitle: "Overtime Approval Request",
+    headerSubtitle: "New overtime request awaiting your approval",
+    colors: {
+      headerBg: BRAND_COLORS.primary,
+      headerBg2: BRAND_COLORS.secondary,
+      primary: BRAND_COLORS.primary,
+      secondary: BRAND_COLORS.secondary,
+      accent: BRAND_COLORS.accent,
+      cardBg: BRAND_COLORS.cardBg,
+      cardBorder: BRAND_COLORS.cardBorder,
+      textPrimary: BRAND_COLORS.textPrimary,
+      textSecondary: BRAND_COLORS.textSecondary,
+    },
+    bodyHtml,
+    footerHtml: renderFooter({
+      signature: "",
+      companyName: "PT Rhayakan Film Indonesia",
+      note: "This is an automated email from HR System. Please do not reply to this email.",
+    }),
+  });
 
   const text = `
 New Overtime Approval Request
@@ -1537,31 +781,22 @@ export async function sendOvertimeRevisionRequestedEmail(
   const systemUrl = process.env.FRONTEND_URL || "http://localhost:5173";
 
   // Format all overtime dates from entries
-  let overtimeDatesHtml = "";
+  let overtimeDatesRows = [];
   let overtimeDatesText = "";
 
   if (overtimeRequest.entries && overtimeRequest.entries.length > 0) {
     const sortedEntries = overtimeRequest.entries.sort(
       (a, b) => new Date(a.date) - new Date(b.date),
     );
-    overtimeDatesHtml = sortedEntries
-      .map(
-        (entry) => `
-      <div class="detail-row">
-        <div class="detail-label">${new Date(entry.date).toLocaleDateString(
-          "en-US",
-          {
-            weekday: "short",
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-          },
-        )}:</div>
-        <div class="detail-value">${entry.hours} hours - ${entry.description}</div>
-      </div>
-    `,
-      )
-      .join("");
+    overtimeDatesRows = sortedEntries.map((entry) => ({
+      label: `${new Date(entry.date).toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })}:`,
+      value: `${entry.hours} hours - ${entry.description}`,
+    }));
 
     overtimeDatesText = sortedEntries
       .map(
@@ -1571,227 +806,77 @@ export async function sendOvertimeRevisionRequestedEmail(
       .join("\n");
   }
 
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <style>
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-          line-height: 1.6;
-          color: ${BRAND_COLORS.textPrimary};
-          margin: 0;
-          padding: 0;
-          background-color: #F9F9F9;
-        }
-        .email-wrapper {
-          width: 100%;
-          background-color: #F9F9F9;
-          padding: 40px 20px;
-        }
-        .container {
-          max-width: 600px;
-          margin: 0 auto;
-          background: ${BRAND_COLORS.accent};
-          border-radius: 12px;
-          overflow: hidden;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        .header {
-          background: linear-gradient(135deg, #FFC107 0%, #FF9800 100%);
-          color: ${BRAND_COLORS.secondary};
-          padding: 40px 30px;
-          text-align: center;
-        }
-        .header h1 {
-          margin: 0;
-          font-size: 28px;
-          font-weight: 600;
-          letter-spacing: -0.5px;
-        }
-        .content {
-          padding: 40px 30px;
-        }
-        .content p {
-          margin: 0 0 20px 0;
-          font-size: 16px;
-          line-height: 1.8;
-        }
-        .status-badge {
-          display: inline-block;
-          background: #FFC107;
-          color: ${BRAND_COLORS.secondary};
-          padding: 10px 24px;
-          border-radius: 25px;
-          font-weight: 600;
-          font-size: 14px;
-          text-transform: uppercase;
-          letter-spacing: 1px;
-          margin: 20px 0;
-        }
-        .details-card {
-          background: ${BRAND_COLORS.cardBg};
-          border: 1px solid ${BRAND_COLORS.cardBorder};
-          border-radius: 10px;
-          padding: 25px;
-          margin: 30px 0;
-        }
-        .details-card h3 {
-          margin: 0 0 20px 0;
-          font-size: 18px;
-          font-weight: 600;
-          color: ${BRAND_COLORS.primary};
-          text-align: center;
-        }
-        .detail-row {
-          display: flex;
-          padding: 12px 0;
-          border-bottom: 1px solid ${BRAND_COLORS.cardBorder};
-        }
-        .detail-row:last-child {
-          border-bottom: none;
-        }
-        .detail-label {
-          font-weight: 600;
-          color: ${BRAND_COLORS.textPrimary};
-          min-width: 120px;
-          flex-shrink: 0;
-        }
-        .detail-value {
-          color: ${BRAND_COLORS.textSecondary};
-          flex: 1;
-        }
-        .comment-box {
-          background: #FFF3CD;
-          border-left: 4px solid #FFC107;
-          padding: 20px;
-          margin: 25px 0;
-          border-radius: 4px;
-        }
-        .comment-box h4 {
-          margin: 0 0 10px 0;
-          font-size: 16px;
-          font-weight: 600;
-          color: #856404;
-        }
-        .comment-text {
-          color: ${BRAND_COLORS.textPrimary};
-          font-style: italic;
-          line-height: 1.6;
-        }
-        .button {
-          display: inline-block;
-          background: #FFC107;
-          color: ${BRAND_COLORS.secondary};
-          padding: 14px 35px;
-          text-decoration: none;
-          border-radius: 8px;
-          font-weight: 600;
-          font-size: 15px;
-          margin-top: 25px;
-          transition: all 0.3s ease;
-        }
-        .button:hover {
-          background: #FF9800;
-        }
-        .footer {
-          padding: 30px;
-          background: ${BRAND_COLORS.cardBg};
-          text-align: center;
-          color: ${BRAND_COLORS.textSecondary};
-          font-size: 14px;
-          border-top: 1px solid ${BRAND_COLORS.cardBorder};
-        }
-        .footer-signature {
-          font-weight: 600;
-          color: ${BRAND_COLORS.textPrimary};
-          margin-bottom: 10px;
-        }
-
-        @media only screen and (max-width: 600px) {
-          .email-wrapper { padding: 20px 10px; }
-          .content { padding: 30px 20px; }
-          .details-card { padding: 20px 15px; }
-          .detail-row { flex-direction: column; }
-          .detail-label { min-width: auto; margin-bottom: 5px; }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="email-wrapper">
-        <div class="container">
-          <div class="header">
-            <h1>Overtime Revision Requested</h1>
-            <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">
-              Your overtime request requires revision
-            </p>
-          </div>
-
-          <div class="content">
-            <p>Dear <strong>${employee.name}</strong>,</p>
-
-            <p>Your overtime request has been reviewed and requires revision before it can be approved.</p>
-
-            <div style="text-align: center;">
-              <div class="status-badge">REVISION REQUESTED</div>
-            </div>
-
-            <div class="details-card">
-              <h3>Request Details</h3>
-
-              ${overtimeDatesHtml}
-
-              <div class="detail-row" style="border-top: 2px solid ${BRAND_COLORS.primary}; margin-top: 15px; padding-top: 15px;">
-                <div class="detail-label">Total Hours:</div>
-                <div class="detail-value"><strong>${overtimeHours} hours</strong></div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Reviewed By:</div>
-                <div class="detail-value">${approverName}</div>
-              </div>
-            </div>
-
-            <div class="comment-box">
-              <h4>Reviewer's Comment:</h4>
-              <div class="comment-text">${revisionComment}</div>
-            </div>
-
-            <p style="margin-top: 30px;">
-              <strong>What to do next:</strong>
-            </p>
-
-            <ul style="color: ${BRAND_COLORS.textSecondary}; padding-left: 20px;">
-              <li>Review the comment from your approver</li>
-              <li>Edit your overtime request with the necessary changes</li>
-              <li>Resubmit for approval</li>
-            </ul>
-
-            <p style="text-align: center;">
-              <a href="${systemUrl}/overtime/history" class="button">
-                Edit Request Now
-              </a>
-            </p>
-
-            <p style="margin-top: 30px; font-size: 14px; color: ${BRAND_COLORS.textSecondary};">
-              If you have any questions about the requested revisions, please contact your supervisor or HR department.
-            </p>
-          </div>
-
-          <div class="footer">
-            <div class="footer-signature">Human Resources Department</div>
-            <div>PT Rhayakan Film Indonesia</div>
-            <div style="margin-top: 15px; font-size: 12px; color: #999;">
-              This is an automated email from HR System. Please do not reply to this email.
-            </div>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
+  const bodyHtml = `
+    <p>Dear <strong>${escapeHtml(employee.name)}</strong>,</p>
+    <p>Your overtime request has been reviewed and requires revision before it can be approved.</p>
+    <p style="text-align: center;">${renderStatusBadge("REVISION REQUESTED", {
+      bg: "#FFC107",
+      color: BRAND_COLORS.secondary,
+    })}</p>
+    ${renderInfoCard({
+      title: "Request Details",
+      rows: [
+        ...overtimeDatesRows,
+        {
+          label: "Total Hours:",
+          value: `<strong>${escapeHtml(overtimeHours)} hours</strong>`,
+          raw: true,
+        },
+        { label: "Reviewed By:", value: approverName },
+      ],
+    })}
+    ${renderCalloutBox({
+      label: "Reviewer's Comment:",
+      bodyHtml: `<span style="font-style: italic;">${escapeHtml(revisionComment)}</span>`,
+      bg: "#FFF3CD",
+      border: "#FFC107",
+      textColor: BRAND_COLORS.textPrimary,
+      labelColor: "#856404",
+    })}
+    <p style="margin-top: 30px;">
+      <strong>What to do next:</strong>
+    </p>
+    <ul style="color: ${BRAND_COLORS.textSecondary}; padding-left: 20px;">
+      <li>Review the comment from your approver</li>
+      <li>Edit your overtime request with the necessary changes</li>
+      <li>Resubmit for approval</li>
+    </ul>
+    ${renderActionButtons([
+      renderButton({
+        href: `${systemUrl}/overtime/history`,
+        text: "Edit Request Now",
+        bg: "#FFC107",
+        color: BRAND_COLORS.secondary,
+      }),
+    ])}
+    <p style="margin-top: 30px; font-size: 14px; color: ${BRAND_COLORS.textSecondary};">
+      If you have any questions about the requested revisions, please contact your supervisor or HR department.
+    </p>
   `;
+
+  const html = renderEmailDocument({
+    title: "Overtime Revision Requested",
+    headerTitle: "Overtime Revision Requested",
+    headerSubtitle: "Your overtime request requires revision",
+    colors: {
+      headerBg: "#FFC107",
+      headerBg2: "#FF9800",
+      headerTextColor: BRAND_COLORS.secondary,
+      primary: BRAND_COLORS.primary,
+      secondary: BRAND_COLORS.secondary,
+      accent: BRAND_COLORS.accent,
+      cardBg: BRAND_COLORS.cardBg,
+      cardBorder: BRAND_COLORS.cardBorder,
+      textPrimary: BRAND_COLORS.textPrimary,
+      textSecondary: BRAND_COLORS.textSecondary,
+    },
+    bodyHtml,
+    footerHtml: renderFooter({
+      signature: "",
+      companyName: "PT Rhayakan Film Indonesia",
+      note: "This is an automated email from HR System. Please do not reply to this email.",
+    }),
+  });
 
   const text = `
 Overtime Revision Requested
@@ -1861,264 +946,91 @@ export async function sendLeaveRequestNotification(
     },
   );
 
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <style>
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-          line-height: 1.6;
-          color: ${BRAND_COLORS.textPrimary};
-          margin: 0;
-          padding: 0;
-          background-color: #F9F9F9;
-        }
-        .email-wrapper {
-          width: 100%;
-          background-color: #F9F9F9;
-          padding: 40px 20px;
-        }
-        .container {
-          max-width: 600px;
-          margin: 0 auto;
-          background: ${BRAND_COLORS.accent};
-          border-radius: 12px;
-          overflow: hidden;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        .header {
-          background: linear-gradient(135deg, ${BRAND_COLORS.primary} 0%, ${BRAND_COLORS.secondary} 100%);
-          color: ${BRAND_COLORS.accent};
-          padding: 40px 30px;
-          text-align: center;
-        }
-        .header h1 {
-          margin: 0;
-          font-size: 28px;
-          font-weight: 600;
-          letter-spacing: -0.5px;
-        }
-        .content {
-          padding: 40px 30px;
-        }
-        .content p {
-          margin: 0 0 20px 0;
-          font-size: 16px;
-          line-height: 1.8;
-        }
-        .status-badge {
-          display: inline-block;
-          background: #FFC107;
-          color: ${BRAND_COLORS.secondary};
-          padding: 10px 24px;
-          border-radius: 25px;
-          font-weight: 600;
-          font-size: 14px;
-          text-transform: uppercase;
-          letter-spacing: 1px;
-          margin: 20px 0;
-        }
-        .employee-card {
-          background: ${BRAND_COLORS.cardBg};
-          border: 1px solid ${BRAND_COLORS.cardBorder};
-          border-radius: 10px;
-          padding: 25px;
-          margin: 30px 0;
-        }
-        .employee-card h3 {
-          margin: 0 0 20px 0;
-          font-size: 18px;
-          font-weight: 600;
-          color: ${BRAND_COLORS.primary};
-          text-align: center;
-        }
-        .detail-row {
-          display: flex;
-          padding: 12px 0;
-          border-bottom: 1px solid ${BRAND_COLORS.cardBorder};
-        }
-        .detail-row:last-child {
-          border-bottom: none;
-        }
-        .detail-label {
-          font-weight: 600;
-          color: ${BRAND_COLORS.textPrimary};
-          min-width: 140px;
-          flex-shrink: 0;
-        }
-        .detail-value {
-          color: ${BRAND_COLORS.textSecondary};
-          flex: 1;
-        }
-        .reason-box {
-          background: #FFF9E6;
-          border-left: 4px solid #FFC107;
-          padding: 15px;
-          margin: 20px 0;
-          border-radius: 4px;
-        }
-        .reason-box strong {
-          color: ${BRAND_COLORS.primary};
-          display: block;
-          margin-bottom: 8px;
-        }
-        .action-buttons {
-          text-align: center;
-          margin: 30px 0;
-        }
-        .button {
-          display: inline-block;
-          padding: 14px 35px;
-          text-decoration: none;
-          border-radius: 8px;
-          font-weight: 600;
-          font-size: 15px;
-          margin: 5px;
-          transition: all 0.3s ease;
-        }
-        .button-review {
-          background: ${BRAND_COLORS.primary};
-          color: white;
-        }
-        .button-review:hover {
-          background: ${BRAND_COLORS.secondary};
-        }
-        .footer {
-          padding: 30px;
-          background: ${BRAND_COLORS.cardBg};
-          text-align: center;
-          color: ${BRAND_COLORS.textSecondary};
-          font-size: 14px;
-          border-top: 1px solid ${BRAND_COLORS.cardBorder};
-        }
-        .footer-signature {
-          font-weight: 600;
-          color: ${BRAND_COLORS.textPrimary};
-          margin-bottom: 10px;
-        }
-
-        @media only screen and (max-width: 600px) {
-          .email-wrapper { padding: 20px 10px; }
-          .content { padding: 30px 20px; }
-          .employee-card { padding: 20px 15px; }
-          .detail-row { flex-direction: column; }
-          .detail-label { min-width: auto; margin-bottom: 5px; }
-          .button { display: block; margin: 10px 0; }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="email-wrapper">
-        <div class="container">
-          <div class="header">
-            <h1>Leave Approval Request</h1>
-            <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">
-              New leave request awaiting your approval
-            </p>
-          </div>
-
-          <div class="content">
-            <p>Dear <strong>${approver.name}</strong>,</p>
-
-            <p>You have received a new leave request that requires your approval:</p>
-
-            <div style="text-align: center;">
-              <div class="status-badge">PENDING APPROVAL</div>
-            </div>
-
-            <div class="employee-card">
-              <h3>Employee Information</h3>
-
-              <div class="detail-row">
-                <div class="detail-label">Employee:</div>
-                <div class="detail-value"><strong>${employee.name}</strong></div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Employee ID:</div>
-                <div class="detail-value">${employee.nip || employee.id}</div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Division:</div>
-                <div class="detail-value">${employee.division?.name || "N/A"}</div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Role:</div>
-                <div class="detail-value">${employee.role?.name || "N/A"}</div>
-              </div>
-            </div>
-
-            <div class="employee-card">
-              <h3>Leave Details</h3>
-
-              <div class="detail-row">
-                <div class="detail-label">Leave Type:</div>
-                <div class="detail-value"><strong>${leaveRequest.leaveType}</strong></div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Start Date:</div>
-                <div class="detail-value">${formattedStartDate}</div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">End Date:</div>
-                <div class="detail-value">${formattedEndDate}</div>
-              </div>
-
-              <div class="detail-row" style="border-top: 2px solid ${BRAND_COLORS.primary}; margin-top: 15px; padding-top: 15px;">
-                <div class="detail-label">Duration:</div>
-                <div class="detail-value"><strong style="color: ${BRAND_COLORS.primary}; font-size: 18px;">${leaveRequest.totalDays} day${leaveRequest.totalDays > 1 ? "s" : ""}</strong></div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Submitted:</div>
-                <div class="detail-value">${new Date(
-                  leaveRequest.createdAt,
-                ).toLocaleString("en-US", {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                })}</div>
-              </div>
-            </div>
-
-            <div class="reason-box">
-              <strong>Reason:</strong>
-              ${leaveRequest.reason}
-            </div>
-
-            <p style="text-align: center; margin-top: 30px;">
-              <strong>Please review and approve this request:</strong>
-            </p>
-
-            <div class="action-buttons">
-              <a href="${systemUrl}/leave/approval" class="button button-review">
-                Review Request
-              </a>
-            </div>
-
-            <p style="margin-top: 30px; font-size: 14px; color: ${BRAND_COLORS.textSecondary}; text-align: center;">
-              Please process this request at your earliest convenience.
-            </p>
-          </div>
-
-          <div class="footer">
-            <div class="footer-signature">Human Resources Department</div>
-            <div>PT Rhayakan Film Indonesia</div>
-            <div style="margin-top: 15px; font-size: 12px; color: #999;">
-              This is an automated email from HR System. Please do not reply to this email.
-            </div>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
+  const bodyHtml = `
+    <p>Dear <strong>${escapeHtml(approver.name)}</strong>,</p>
+    <p>You have received a new leave request that requires your approval:</p>
+    <p style="text-align: center;">${renderStatusBadge("PENDING APPROVAL", {
+      bg: "#FFC107",
+      color: BRAND_COLORS.secondary,
+    })}</p>
+    ${renderInfoCard({
+      title: "Employee Information",
+      rows: [
+        { label: "Employee:", value: `<strong>${escapeHtml(employee.name)}</strong>`, raw: true },
+        { label: "Employee ID:", value: employee.nip || employee.id },
+        { label: "Division:", value: employee.division?.name || "N/A" },
+        { label: "Role:", value: employee.role?.name || "N/A" },
+      ],
+    })}
+    ${renderInfoCard({
+      title: "Leave Details",
+      rows: [
+        {
+          label: "Leave Type:",
+          value: `<strong>${escapeHtml(leaveRequest.leaveType)}</strong>`,
+          raw: true,
+        },
+        { label: "Start Date:", value: formattedStartDate },
+        { label: "End Date:", value: formattedEndDate },
+        {
+          label: "Duration:",
+          value: `<strong style="color: ${BRAND_COLORS.primary}; font-size: 18px;">${escapeHtml(leaveRequest.totalDays)} day${leaveRequest.totalDays > 1 ? "s" : ""}</strong>`,
+          raw: true,
+        },
+        {
+          label: "Submitted:",
+          value: new Date(leaveRequest.createdAt).toLocaleString("en-US", {
+            dateStyle: "medium",
+            timeStyle: "short",
+          }),
+        },
+      ],
+    })}
+    ${renderCalloutBox({
+      label: "Reason:",
+      bodyHtml: escapeHtml(leaveRequest.reason),
+      bg: "#FFF9E6",
+      border: "#FFC107",
+      textColor: BRAND_COLORS.textPrimary,
+      labelColor: BRAND_COLORS.primary,
+    })}
+    <p style="text-align: center; margin-top: 30px;">
+      <strong>Please review and approve this request:</strong>
+    </p>
+    ${renderActionButtons([
+      renderButton({
+        href: `${systemUrl}/leave/approval`,
+        text: "Review Request",
+        bg: BRAND_COLORS.primary,
+      }),
+    ])}
+    <p style="margin-top: 30px; font-size: 14px; color: ${BRAND_COLORS.textSecondary}; text-align: center;">
+      Please process this request at your earliest convenience.
+    </p>
   `;
+
+  const html = renderEmailDocument({
+    title: "Leave Approval Request",
+    headerTitle: "Leave Approval Request",
+    headerSubtitle: "New leave request awaiting your approval",
+    colors: {
+      headerBg: BRAND_COLORS.primary,
+      headerBg2: BRAND_COLORS.secondary,
+      primary: BRAND_COLORS.primary,
+      secondary: BRAND_COLORS.secondary,
+      accent: BRAND_COLORS.accent,
+      cardBg: BRAND_COLORS.cardBg,
+      cardBorder: BRAND_COLORS.cardBorder,
+      textPrimary: BRAND_COLORS.textPrimary,
+      textSecondary: BRAND_COLORS.textSecondary,
+    },
+    bodyHtml,
+    footerHtml: renderFooter({
+      signature: "",
+      companyName: "PT Rhayakan Film Indonesia",
+      note: "This is an automated email from HR System. Please do not reply to this email.",
+    }),
+  });
 
   const text = `
 New Leave Approval Request
@@ -2190,240 +1102,79 @@ export async function sendLeaveApprovedEmail(
     },
   );
 
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <style>
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-          line-height: 1.6;
-          color: ${BRAND_COLORS.textPrimary};
-          margin: 0;
-          padding: 0;
-          background-color: #F9F9F9;
-        }
-        .email-wrapper {
-          width: 100%;
-          background-color: #F9F9F9;
-          padding: 40px 20px;
-        }
-        .container {
-          max-width: 600px;
-          margin: 0 auto;
-          background: ${BRAND_COLORS.accent};
-          border-radius: 12px;
-          overflow: hidden;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        .header {
-          background: linear-gradient(135deg, #28A745 0%, #20C997 100%);
-          color: white;
-          padding: 40px 30px;
-          text-align: center;
-        }
-        .header h1 {
-          margin: 0;
-          font-size: 28px;
-          font-weight: 600;
-          letter-spacing: -0.5px;
-        }
-        .content {
-          padding: 40px 30px;
-        }
-        .content p {
-          margin: 0 0 20px 0;
-          font-size: 16px;
-          line-height: 1.8;
-        }
-        .status-badge {
-          display: inline-block;
-          background: #28A745;
-          color: white;
-          padding: 10px 24px;
-          border-radius: 25px;
-          font-weight: 600;
-          font-size: 14px;
-          text-transform: uppercase;
-          letter-spacing: 1px;
-          margin: 20px 0;
-        }
-        .details-card {
-          background: ${BRAND_COLORS.cardBg};
-          border: 1px solid ${BRAND_COLORS.cardBorder};
-          border-radius: 10px;
-          padding: 25px;
-          margin: 30px 0;
-        }
-        .details-card h3 {
-          margin: 0 0 20px 0;
-          font-size: 18px;
-          font-weight: 600;
-          color: ${BRAND_COLORS.primary};
-          text-align: center;
-        }
-        .detail-row {
-          display: flex;
-          padding: 12px 0;
-          border-bottom: 1px solid ${BRAND_COLORS.cardBorder};
-        }
-        .detail-row:last-child {
-          border-bottom: none;
-        }
-        .detail-label {
-          font-weight: 600;
-          color: ${BRAND_COLORS.textPrimary};
-          min-width: 120px;
-          flex-shrink: 0;
-        }
-        .detail-value {
-          color: ${BRAND_COLORS.textSecondary};
-          flex: 1;
-        }
-        .celebration-box {
-          background: #E8F5E9;
-          border: 2px solid #28A745;
-          border-radius: 10px;
-          padding: 20px;
-          margin: 25px 0;
-          text-align: center;
-        }
-        .celebration-box h4 {
-          margin: 0 0 10px 0;
-          font-size: 18px;
-          font-weight: 600;
-          color: #28A745;
-        }
-        .celebration-box p {
-          margin: 5px 0;
-          color: ${BRAND_COLORS.textSecondary};
-        }
-        .button {
-          display: inline-block;
-          background: #28A745;
-          color: white;
-          padding: 14px 35px;
-          text-decoration: none;
-          border-radius: 8px;
-          font-weight: 600;
-          font-size: 15px;
-          margin-top: 25px;
-          transition: all 0.3s ease;
-        }
-        .button:hover {
-          background: #218838;
-        }
-        .footer {
-          padding: 30px;
-          background: ${BRAND_COLORS.cardBg};
-          text-align: center;
-          color: ${BRAND_COLORS.textSecondary};
-          font-size: 14px;
-          border-top: 1px solid ${BRAND_COLORS.cardBorder};
-        }
-        .footer-signature {
-          font-weight: 600;
-          color: ${BRAND_COLORS.textPrimary};
-          margin-bottom: 10px;
-        }
-
-        @media only screen and (max-width: 600px) {
-          .email-wrapper { padding: 20px 10px; }
-          .content { padding: 30px 20px; }
-          .details-card { padding: 20px 15px; }
-          .detail-row { flex-direction: column; }
-          .detail-label { min-width: auto; margin-bottom: 5px; }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="email-wrapper">
-        <div class="container">
-          <div class="header">
-            <h1>Leave Request Approved</h1>
-            <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">
-              Your leave has been approved!
-            </p>
-          </div>
-
-          <div class="content">
-            <p>Dear <strong>${employee.name}</strong>,</p>
-
-            <p>Great news! Your leave request has been approved.</p>
-
-            <div style="text-align: center;">
-              <div class="status-badge">APPROVED</div>
-            </div>
-
-            <div class="celebration-box">
-              <h4>Enjoy Your Time Off!</h4>
-              <p>Your leave has been confirmed and processed.</p>
-            </div>
-
-            <div class="details-card">
-              <h3>Leave Details</h3>
-
-              <div class="detail-row">
-                <div class="detail-label">Leave Type:</div>
-                <div class="detail-value"><strong>${leaveRequest.leaveType}</strong></div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Start Date:</div>
-                <div class="detail-value">${formattedStartDate}</div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">End Date:</div>
-                <div class="detail-value">${formattedEndDate}</div>
-              </div>
-
-              <div class="detail-row" style="border-top: 2px solid #28A745; margin-top: 15px; padding-top: 15px;">
-                <div class="detail-label">Duration:</div>
-                <div class="detail-value"><strong style="color: #28A745; font-size: 18px;">${leaveRequest.totalDays} day${leaveRequest.totalDays > 1 ? "s" : ""}</strong></div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Approved By:</div>
-                <div class="detail-value">${approverName}</div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Approved At:</div>
-                <div class="detail-value">${new Date(
-                  leaveRequest.approvedAt,
-                ).toLocaleString("en-US", {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                })}</div>
-              </div>
-            </div>
-
-            <p style="text-align: center;">
-              <a href="${systemUrl}/leave/history" class="button">
-                View Leave History
-              </a>
-            </p>
-
-            <p style="margin-top: 30px; font-size: 14px; color: ${BRAND_COLORS.textSecondary};">
-              Have a great time off! If you have any questions, please contact HR.
-            </p>
-          </div>
-
-          <div class="footer">
-            <div class="footer-signature">Human Resources Department</div>
-            <div>PT Rhayakan Film Indonesia</div>
-            <div style="margin-top: 15px; font-size: 12px; color: #999;">
-              This is an automated email from HR System. Please do not reply to this email.
-            </div>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
+  const bodyHtml = `
+    <p>Dear <strong>${escapeHtml(employee.name)}</strong>,</p>
+    <p>Great news! Your leave request has been approved.</p>
+    <p style="text-align: center;">${renderStatusBadge("APPROVED", {
+      bg: POSITIVE_COLORS.badgeBg,
+    })}</p>
+    ${renderCalloutBox({
+      label: "Enjoy Your Time Off!",
+      bodyHtml: "Your leave has been confirmed and processed.",
+      bg: "#E8F5E9",
+      border: POSITIVE_COLORS.badgeBg,
+      textColor: BRAND_COLORS.textSecondary,
+      labelColor: POSITIVE_COLORS.badgeBg,
+    })}
+    ${renderInfoCard({
+      title: "Leave Details",
+      rows: [
+        {
+          label: "Leave Type:",
+          value: `<strong>${escapeHtml(leaveRequest.leaveType)}</strong>`,
+          raw: true,
+        },
+        { label: "Start Date:", value: formattedStartDate },
+        { label: "End Date:", value: formattedEndDate },
+        {
+          label: "Duration:",
+          value: `<strong style="color: ${POSITIVE_COLORS.badgeBg}; font-size: 18px;">${escapeHtml(leaveRequest.totalDays)} day${leaveRequest.totalDays > 1 ? "s" : ""}</strong>`,
+          raw: true,
+        },
+        { label: "Approved By:", value: approverName },
+        {
+          label: "Approved At:",
+          value: new Date(leaveRequest.approvedAt).toLocaleString("en-US", {
+            dateStyle: "medium",
+            timeStyle: "short",
+          }),
+        },
+      ],
+    })}
+    ${renderActionButtons([
+      renderButton({
+        href: `${systemUrl}/leave/history`,
+        text: "View Leave History",
+        bg: POSITIVE_COLORS.badgeBg,
+      }),
+    ])}
+    <p style="margin-top: 30px; font-size: 14px; color: ${BRAND_COLORS.textSecondary};">
+      Have a great time off! If you have any questions, please contact HR.
+    </p>
   `;
+
+  const html = renderEmailDocument({
+    title: "Leave Request Approved",
+    headerTitle: "Leave Request Approved",
+    headerSubtitle: "Your leave has been approved!",
+    colors: {
+      headerBg: POSITIVE_COLORS.badgeBg,
+      headerBg2: POSITIVE_COLORS.headerBg2,
+      primary: BRAND_COLORS.primary,
+      secondary: BRAND_COLORS.secondary,
+      accent: BRAND_COLORS.accent,
+      cardBg: BRAND_COLORS.cardBg,
+      cardBorder: BRAND_COLORS.cardBorder,
+      textPrimary: BRAND_COLORS.textPrimary,
+      textSecondary: BRAND_COLORS.textSecondary,
+    },
+    bodyHtml,
+    footerHtml: renderFooter({
+      signature: "",
+      companyName: "PT Rhayakan Film Indonesia",
+      note: "This is an automated email from HR System. Please do not reply to this email.",
+    }),
+  });
 
   const text = `
 Leave Request Approved
@@ -2488,240 +1239,79 @@ export async function sendLeaveRejectedEmail(
     },
   );
 
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <style>
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-          line-height: 1.6;
-          color: ${BRAND_COLORS.textPrimary};
-          margin: 0;
-          padding: 0;
-          background-color: #F9F9F9;
-        }
-        .email-wrapper {
-          width: 100%;
-          background-color: #F9F9F9;
-          padding: 40px 20px;
-        }
-        .container {
-          max-width: 600px;
-          margin: 0 auto;
-          background: ${BRAND_COLORS.accent};
-          border-radius: 12px;
-          overflow: hidden;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        .header {
-          background: linear-gradient(135deg, #DC3545 0%, #C82333 100%);
-          color: white;
-          padding: 40px 30px;
-          text-align: center;
-        }
-        .header h1 {
-          margin: 0;
-          font-size: 28px;
-          font-weight: 600;
-          letter-spacing: -0.5px;
-        }
-        .content {
-          padding: 40px 30px;
-        }
-        .content p {
-          margin: 0 0 20px 0;
-          font-size: 16px;
-          line-height: 1.8;
-        }
-        .status-badge {
-          display: inline-block;
-          background: #DC3545;
-          color: white;
-          padding: 10px 24px;
-          border-radius: 25px;
-          font-weight: 600;
-          font-size: 14px;
-          text-transform: uppercase;
-          letter-spacing: 1px;
-          margin: 20px 0;
-        }
-        .details-card {
-          background: ${BRAND_COLORS.cardBg};
-          border: 1px solid ${BRAND_COLORS.cardBorder};
-          border-radius: 10px;
-          padding: 25px;
-          margin: 30px 0;
-        }
-        .details-card h3 {
-          margin: 0 0 20px 0;
-          font-size: 18px;
-          font-weight: 600;
-          color: ${BRAND_COLORS.primary};
-          text-align: center;
-        }
-        .detail-row {
-          display: flex;
-          padding: 12px 0;
-          border-bottom: 1px solid ${BRAND_COLORS.cardBorder};
-        }
-        .detail-row:last-child {
-          border-bottom: none;
-        }
-        .detail-label {
-          font-weight: 600;
-          color: ${BRAND_COLORS.textPrimary};
-          min-width: 120px;
-          flex-shrink: 0;
-        }
-        .detail-value {
-          color: ${BRAND_COLORS.textSecondary};
-          flex: 1;
-        }
-        .rejection-box {
-          background: #FFF3CD;
-          border-left: 4px solid #DC3545;
-          padding: 20px;
-          margin: 25px 0;
-          border-radius: 4px;
-        }
-        .rejection-box h4 {
-          margin: 0 0 10px 0;
-          font-size: 16px;
-          font-weight: 600;
-          color: #856404;
-        }
-        .rejection-text {
-          color: ${BRAND_COLORS.textPrimary};
-          font-style: italic;
-          line-height: 1.6;
-        }
-        .button {
-          display: inline-block;
-          background: ${BRAND_COLORS.primary};
-          color: white;
-          padding: 14px 35px;
-          text-decoration: none;
-          border-radius: 8px;
-          font-weight: 600;
-          font-size: 15px;
-          margin-top: 25px;
-          transition: all 0.3s ease;
-        }
-        .button:hover {
-          background: ${BRAND_COLORS.secondary};
-        }
-        .footer {
-          padding: 30px;
-          background: ${BRAND_COLORS.cardBg};
-          text-align: center;
-          color: ${BRAND_COLORS.textSecondary};
-          font-size: 14px;
-          border-top: 1px solid ${BRAND_COLORS.cardBorder};
-        }
-        .footer-signature {
-          font-weight: 600;
-          color: ${BRAND_COLORS.textPrimary};
-          margin-bottom: 10px;
-        }
-
-        @media only screen and (max-width: 600px) {
-          .email-wrapper { padding: 20px 10px; }
-          .content { padding: 30px 20px; }
-          .details-card { padding: 20px 15px; }
-          .detail-row { flex-direction: column; }
-          .detail-label { min-width: auto; margin-bottom: 5px; }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="email-wrapper">
-        <div class="container">
-          <div class="header">
-            <h1>Leave Request Not Approved</h1>
-            <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">
-              Your leave request has been declined
-            </p>
-          </div>
-
-          <div class="content">
-            <p>Dear <strong>${employee.name}</strong>,</p>
-
-            <p>We regret to inform you that your leave request has not been approved.</p>
-
-            <div style="text-align: center;">
-              <div class="status-badge">NOT APPROVED</div>
-            </div>
-
-            <div class="details-card">
-              <h3>Request Details</h3>
-
-              <div class="detail-row">
-                <div class="detail-label">Leave Type:</div>
-                <div class="detail-value"><strong>${leaveRequest.leaveType}</strong></div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Start Date:</div>
-                <div class="detail-value">${formattedStartDate}</div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">End Date:</div>
-                <div class="detail-value">${formattedEndDate}</div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Duration:</div>
-                <div class="detail-value">${leaveRequest.totalDays} day${leaveRequest.totalDays > 1 ? "s" : ""}</div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Reviewed By:</div>
-                <div class="detail-value">${approverName}</div>
-              </div>
-            </div>
-
-            <div class="rejection-box">
-              <h4>Reason for Rejection:</h4>
-              <div class="rejection-text">${rejectionReason}</div>
-            </div>
-
-            <p style="margin-top: 30px;">
-              <strong>What to do next:</strong>
-            </p>
-
-            <ul style="color: ${BRAND_COLORS.textSecondary}; padding-left: 20px;">
-              <li>Review the rejection reason above</li>
-              <li>You can submit a new leave request with adjusted dates if needed</li>
-              <li>Contact your supervisor or HR if you have questions</li>
-            </ul>
-
-            <p style="text-align: center;">
-              <a href="${systemUrl}/leave/history" class="button">
-                View Leave History
-              </a>
-            </p>
-
-            <p style="margin-top: 30px; font-size: 14px; color: ${BRAND_COLORS.textSecondary};">
-              If you have any questions or concerns, please contact your supervisor or HR department.
-            </p>
-          </div>
-
-          <div class="footer">
-            <div class="footer-signature">Human Resources Department</div>
-            <div>PT Rhayakan Film Indonesia</div>
-            <div style="margin-top: 15px; font-size: 12px; color: #999;">
-              This is an automated email from HR System. Please do not reply to this email.
-            </div>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
+  const bodyHtml = `
+    <p>Dear <strong>${escapeHtml(employee.name)}</strong>,</p>
+    <p>We regret to inform you that your leave request has not been approved.</p>
+    <p style="text-align: center;">${renderStatusBadge("NOT APPROVED", {
+      bg: "#DC3545",
+    })}</p>
+    ${renderInfoCard({
+      title: "Request Details",
+      rows: [
+        {
+          label: "Leave Type:",
+          value: `<strong>${escapeHtml(leaveRequest.leaveType)}</strong>`,
+          raw: true,
+        },
+        { label: "Start Date:", value: formattedStartDate },
+        { label: "End Date:", value: formattedEndDate },
+        {
+          label: "Duration:",
+          value: `${leaveRequest.totalDays} day${leaveRequest.totalDays > 1 ? "s" : ""}`,
+        },
+        { label: "Reviewed By:", value: approverName },
+      ],
+    })}
+    ${renderCalloutBox({
+      label: "Reason for Rejection:",
+      bodyHtml: `<span style="font-style: italic;">${escapeHtml(rejectionReason)}</span>`,
+      bg: "#FFF3CD",
+      border: "#DC3545",
+      textColor: BRAND_COLORS.textPrimary,
+      labelColor: "#856404",
+    })}
+    <p style="margin-top: 30px;">
+      <strong>What to do next:</strong>
+    </p>
+    <ul style="color: ${BRAND_COLORS.textSecondary}; padding-left: 20px;">
+      <li>Review the rejection reason above</li>
+      <li>You can submit a new leave request with adjusted dates if needed</li>
+      <li>Contact your supervisor or HR if you have questions</li>
+    </ul>
+    ${renderActionButtons([
+      renderButton({
+        href: `${systemUrl}/leave/history`,
+        text: "View Leave History",
+        bg: BRAND_COLORS.primary,
+      }),
+    ])}
+    <p style="margin-top: 30px; font-size: 14px; color: ${BRAND_COLORS.textSecondary};">
+      If you have any questions or concerns, please contact your supervisor or HR department.
+    </p>
   `;
+
+  const html = renderEmailDocument({
+    title: "Leave Request Not Approved",
+    headerTitle: "Leave Request Not Approved",
+    headerSubtitle: "Your leave request has been declined",
+    colors: {
+      headerBg: "#DC3545",
+      headerBg2: "#C82333",
+      primary: BRAND_COLORS.primary,
+      secondary: BRAND_COLORS.secondary,
+      accent: BRAND_COLORS.accent,
+      cardBg: BRAND_COLORS.cardBg,
+      cardBorder: BRAND_COLORS.cardBorder,
+      textPrimary: BRAND_COLORS.textPrimary,
+      textSecondary: BRAND_COLORS.textSecondary,
+    },
+    bodyHtml,
+    footerHtml: renderFooter({
+      signature: "",
+      companyName: "PT Rhayakan Film Indonesia",
+      note: "This is an automated email from HR System. Please do not reply to this email.",
+    }),
+  });
 
   const text = `
 Leave Request Not Approved
@@ -2806,223 +1396,72 @@ export async function sendLeaveReminderH7Email(
     },
   );
 
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <style>
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-          line-height: 1.6;
-          color: ${BRAND_COLORS.textPrimary};
-          margin: 0;
-          padding: 0;
-          background-color: #F9F9F9;
-        }
-        .email-wrapper {
-          width: 100%;
-          background-color: #F9F9F9;
-          padding: 40px 20px;
-        }
-        .container {
-          max-width: 600px;
-          margin: 0 auto;
-          background: ${BRAND_COLORS.accent};
-          border-radius: 12px;
-          overflow: hidden;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        .header {
-          background: linear-gradient(135deg, #17A2B8 0%, #138496 100%);
-          color: white;
-          padding: 40px 30px;
-          text-align: center;
-        }
-        .header h1 {
-          margin: 0;
-          font-size: 28px;
-          font-weight: 600;
-          letter-spacing: -0.5px;
-        }
-        .content {
-          padding: 40px 30px;
-        }
-        .content p {
-          margin: 0 0 20px 0;
-          font-size: 16px;
-          line-height: 1.8;
-        }
-        .info-badge {
-          display: inline-block;
-          background: #17A2B8;
-          color: white;
-          padding: 10px 24px;
-          border-radius: 25px;
-          font-weight: 600;
-          font-size: 14px;
-          text-transform: uppercase;
-          letter-spacing: 1px;
-          margin: 20px 0;
-        }
-        .employee-card {
-          background: ${BRAND_COLORS.cardBg};
-          border: 1px solid ${BRAND_COLORS.cardBorder};
-          border-radius: 10px;
-          padding: 25px;
-          margin: 30px 0;
-        }
-        .employee-card h3 {
-          margin: 0 0 20px 0;
-          font-size: 18px;
-          font-weight: 600;
-          color: ${BRAND_COLORS.primary};
-          text-align: center;
-        }
-        .detail-row {
-          display: flex;
-          padding: 12px 0;
-          border-bottom: 1px solid ${BRAND_COLORS.cardBorder};
-        }
-        .detail-row:last-child {
-          border-bottom: none;
-        }
-        .detail-label {
-          font-weight: 600;
-          color: ${BRAND_COLORS.textPrimary};
-          min-width: 140px;
-          flex-shrink: 0;
-        }
-        .detail-value {
-          color: ${BRAND_COLORS.textSecondary};
-          flex: 1;
-        }
-        .highlight-box {
-          background: #E7F6F8;
-          border-left: 4px solid #17A2B8;
-          padding: 20px;
-          margin: 25px 0;
-          border-radius: 4px;
-        }
-        .highlight-box h4 {
-          margin: 0 0 10px 0;
-          font-size: 16px;
-          font-weight: 600;
-          color: #17A2B8;
-        }
-        .highlight-box p {
-          margin: 5px 0;
-          color: ${BRAND_COLORS.textPrimary};
-        }
-        .footer {
-          padding: 30px;
-          background: ${BRAND_COLORS.cardBg};
-          text-align: center;
-          color: ${BRAND_COLORS.textSecondary};
-          font-size: 14px;
-          border-top: 1px solid ${BRAND_COLORS.cardBorder};
-        }
-        .footer-signature {
-          font-weight: 600;
-          color: ${BRAND_COLORS.textPrimary};
-          margin-bottom: 10px;
-        }
-
-        @media only screen and (max-width: 600px) {
-          .email-wrapper { padding: 20px 10px; }
-          .content { padding: 30px 20px; }
-          .employee-card { padding: 20px 15px; }
-          .detail-row { flex-direction: column; }
-          .detail-label { min-width: auto; margin-bottom: 5px; }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="email-wrapper">
-        <div class="container">
-          <div class="header">
-            <h1>Leave Reminder Notice</h1>
-            <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">
-              Upcoming absence notification for your team
-            </p>
-          </div>
-
-          <div class="content">
-            <p>Dear <strong>${recipient.name}</strong>,</p>
-
-            <p>This is a reminder that <strong>${employee.name}</strong> from your division will be on leave starting in ${daysUntilLeave} days.</p>
-
-            <div style="text-align: center;">
-              <div class="info-badge">UPCOMING LEAVE</div>
-            </div>
-
-            <div class="employee-card">
-              <h3>Employee Information</h3>
-
-              <div class="detail-row">
-                <div class="detail-label">Employee:</div>
-                <div class="detail-value"><strong>${employee.name}</strong></div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Division:</div>
-                <div class="detail-value">${employee.division?.name || "N/A"}</div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Role:</div>
-                <div class="detail-value">${employee.role?.name || "N/A"}</div>
-              </div>
-            </div>
-
-            <div class="employee-card">
-              <h3>Leave Details</h3>
-
-              <div class="detail-row">
-                <div class="detail-label">Leave Type:</div>
-                <div class="detail-value"><strong>${leaveRequest.leaveType}</strong></div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Start Date:</div>
-                <div class="detail-value">${formattedStartDate}</div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">End Date:</div>
-                <div class="detail-value">${formattedEndDate}</div>
-              </div>
-
-              <div class="detail-row" style="border-top: 2px solid ${BRAND_COLORS.primary}; margin-top: 15px; padding-top: 15px;">
-                <div class="detail-label">Duration:</div>
-                <div class="detail-value"><strong style="color: ${BRAND_COLORS.primary}; font-size: 18px;">${leaveRequest.totalDays} day${leaveRequest.totalDays > 1 ? "s" : ""}</strong></div>
-              </div>
-            </div>
-
-            <div class="highlight-box">
-              <h4>Action Required</h4>
-              <p>Please plan accordingly for <strong>${employee.name}</strong>'s absence from <strong>${formattedStartDate}</strong> to <strong>${formattedEndDate}</strong>.</p>
-              <p style="margin-top: 10px;">If you need to reassign tasks or responsibilities, please coordinate with your team in advance.</p>
-            </div>
-
-            <p style="margin-top: 30px; font-size: 14px; color: ${BRAND_COLORS.textSecondary};">
-              This is an automated reminder sent 7 days before the leave starts. If you have any questions, please contact HR.
-            </p>
-          </div>
-
-          <div class="footer">
-            <div class="footer-signature">Human Resources Department</div>
-            <div>PT Rhayakan Film Indonesia</div>
-            <div style="margin-top: 15px; font-size: 12px; color: #999;">
-              This is an automated email from HR System. Please do not reply to this email.
-            </div>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
+  const bodyHtml = `
+    <p>Dear <strong>${escapeHtml(recipient.name)}</strong>,</p>
+    <p>This is a reminder that <strong>${escapeHtml(employee.name)}</strong> from your division will be on leave starting in ${daysUntilLeave} days.</p>
+    <p style="text-align: center;">${renderStatusBadge("UPCOMING LEAVE", {
+      bg: "#17A2B8",
+    })}</p>
+    ${renderInfoCard({
+      title: "Employee Information",
+      rows: [
+        { label: "Employee:", value: `<strong>${escapeHtml(employee.name)}</strong>`, raw: true },
+        { label: "Division:", value: employee.division?.name || "N/A" },
+        { label: "Role:", value: employee.role?.name || "N/A" },
+      ],
+    })}
+    ${renderInfoCard({
+      title: "Leave Details",
+      rows: [
+        {
+          label: "Leave Type:",
+          value: `<strong>${escapeHtml(leaveRequest.leaveType)}</strong>`,
+          raw: true,
+        },
+        { label: "Start Date:", value: formattedStartDate },
+        { label: "End Date:", value: formattedEndDate },
+        {
+          label: "Duration:",
+          value: `<strong style="color: ${BRAND_COLORS.primary}; font-size: 18px;">${escapeHtml(leaveRequest.totalDays)} day${leaveRequest.totalDays > 1 ? "s" : ""}</strong>`,
+          raw: true,
+        },
+      ],
+    })}
+    ${renderCalloutBox({
+      label: "Action Required",
+      bodyHtml: `Please plan accordingly for <strong>${escapeHtml(employee.name)}</strong>'s absence from <strong>${formattedStartDate}</strong> to <strong>${formattedEndDate}</strong>.<br style="margin-top: 10px;" />If you need to reassign tasks or responsibilities, please coordinate with your team in advance.`,
+      bg: "#E7F6F8",
+      border: "#17A2B8",
+      textColor: BRAND_COLORS.textPrimary,
+      labelColor: "#17A2B8",
+    })}
+    <p style="margin-top: 30px; font-size: 14px; color: ${BRAND_COLORS.textSecondary};">
+      This is an automated reminder sent 7 days before the leave starts. If you have any questions, please contact HR.
+    </p>
   `;
+
+  const html = renderEmailDocument({
+    title: "Leave Reminder Notice",
+    headerTitle: "Leave Reminder Notice",
+    headerSubtitle: "Upcoming absence notification for your team",
+    colors: {
+      headerBg: "#17A2B8",
+      headerBg2: "#138496",
+      primary: BRAND_COLORS.primary,
+      secondary: BRAND_COLORS.secondary,
+      accent: BRAND_COLORS.accent,
+      cardBg: BRAND_COLORS.cardBg,
+      cardBorder: BRAND_COLORS.cardBorder,
+      textPrimary: BRAND_COLORS.textPrimary,
+      textSecondary: BRAND_COLORS.textSecondary,
+    },
+    bodyHtml,
+    footerHtml: renderFooter({
+      signature: "",
+      companyName: "PT Rhayakan Film Indonesia",
+      note: "This is an automated email from HR System. Please do not reply to this email.",
+    }),
+  });
 
   const text = `
 Leave Reminder Notice
@@ -3082,183 +1521,62 @@ export async function sendPasswordResetEmail(user, resetToken) {
     timeStyle: "short",
   });
 
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <style>
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-          line-height: 1.6;
-          color: ${BRAND_COLORS.textPrimary};
-          margin: 0;
-          padding: 0;
-          background-color: #F9F9F9;
-        }
-        .email-wrapper {
-          width: 100%;
-          background-color: #F9F9F9;
-          padding: 40px 20px;
-        }
-        .container {
-          max-width: 600px;
-          margin: 0 auto;
-          background: ${BRAND_COLORS.accent};
-          border-radius: 12px;
-          overflow: hidden;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        .header {
-          background: linear-gradient(135deg, ${BRAND_COLORS.primary} 0%, ${BRAND_COLORS.secondary} 100%);
-          color: white;
-          padding: 40px 30px;
-          text-align: center;
-        }
-        .header h1 {
-          margin: 0;
-          font-size: 28px;
-          font-weight: 600;
-          letter-spacing: -0.5px;
-        }
-        .content {
-          padding: 40px 30px;
-        }
-        .content p {
-          margin: 0 0 20px 0;
-          font-size: 16px;
-          line-height: 1.8;
-        }
-        .info-box {
-          background: #E7F3FF;
-          border-left: 4px solid ${BRAND_COLORS.primary};
-          padding: 20px;
-          margin: 25px 0;
-          border-radius: 4px;
-        }
-        .info-box p {
-          margin: 5px 0;
-          color: ${BRAND_COLORS.textPrimary};
-        }
-        .button {
-          display: inline-block;
-          background: ${BRAND_COLORS.primary};
-          color: white;
-          padding: 16px 40px;
-          text-decoration: none;
-          border-radius: 8px;
-          font-weight: 600;
-          font-size: 16px;
-          margin: 20px 0;
-          transition: all 0.3s ease;
-        }
-        .button:hover {
-          background: ${BRAND_COLORS.secondary};
-        }
-        .security-warning {
-          background: #FFF3CD;
-          border-left: 4px solid #FFC107;
-          padding: 20px;
-          margin: 25px 0;
-          border-radius: 4px;
-        }
-        .security-warning h4 {
-          margin: 0 0 10px 0;
-          font-size: 16px;
-          font-weight: 600;
-          color: #856404;
-        }
-        .security-warning p {
-          margin: 5px 0;
-          color: ${BRAND_COLORS.textPrimary};
-        }
-        .footer {
-          padding: 30px;
-          background: ${BRAND_COLORS.cardBg};
-          text-align: center;
-          color: ${BRAND_COLORS.textSecondary};
-          font-size: 14px;
-          border-top: 1px solid ${BRAND_COLORS.cardBorder};
-        }
-        .footer-signature {
-          font-weight: 600;
-          color: ${BRAND_COLORS.textPrimary};
-          margin-bottom: 10px;
-        }
-        .link-text {
-          word-break: break-all;
-          color: ${BRAND_COLORS.textSecondary};
-          font-size: 12px;
-          margin-top: 15px;
-        }
-
-        @media only screen and (max-width: 600px) {
-          .email-wrapper { padding: 20px 10px; }
-          .content { padding: 30px 20px; }
-          .button { display: block; width: 100%; text-align: center; }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="email-wrapper">
-        <div class="container">
-          <div class="header">
-            <h1>Password Reset Request</h1>
-            <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">
-              Reset your HR System password
-            </p>
-          </div>
-
-          <div class="content">
-            <p>Dear <strong>${user.name}</strong>,</p>
-
-            <p>We received a request to reset your password for your HR System account. Click the button below to create a new password:</p>
-
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="${resetUrl}" class="button">
-                Reset Password
-              </a>
-            </div>
-
-            <div class="info-box">
-              <p><strong>Request Details:</strong></p>
-              <p>Email: ${user.email}</p>
-              <p>Time: ${new Date().toLocaleString("en-US", {
-                dateStyle: "medium",
-                timeStyle: "short",
-              })}</p>
-              <p>Expires: ${formattedExpiration}</p>
-            </div>
-
-            <p>This link will expire in <strong>1 hour</strong> for security reasons. If you need a new link, you can request another password reset.</p>
-
-            <div class="security-warning">
-              <h4>Security Notice</h4>
-              <p><strong>If you didn't request this password reset, please ignore this email.</strong> Your password will remain unchanged and secure.</p>
-              <p style="margin-top: 10px;">If you're concerned about your account security, please contact HR immediately.</p>
-            </div>
-
-            <p style="margin-top: 30px; font-size: 14px; color: ${BRAND_COLORS.textSecondary};">
-              If the button doesn't work, copy and paste this link into your browser:
-            </p>
-            <div class="link-text">
-              ${resetUrl}
-            </div>
-          </div>
-
-          <div class="footer">
-            <div class="footer-signature">Human Resources Department</div>
-            <div>PT Rhayakan Film Indonesia</div>
-            <div style="margin-top: 15px; font-size: 12px; color: #999;">
-              This is an automated email from HR System. Please do not reply to this email.
-            </div>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
+  const bodyHtml = `
+    <p>Dear <strong>${escapeHtml(user.name)}</strong>,</p>
+    <p>We received a request to reset your password for your HR System account. Click the button below to create a new password:</p>
+    ${renderActionButtons([
+      renderButton({
+        href: resetUrl,
+        text: "Reset Password",
+        bg: BRAND_COLORS.primary,
+      }),
+    ])}
+    ${renderCalloutBox({
+      label: "Request Details:",
+      bodyHtml: `Email: ${escapeHtml(user.email)}<br/>Time: ${new Date().toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}<br/>Expires: ${formattedExpiration}`,
+      bg: "#E7F3FF",
+      border: BRAND_COLORS.primary,
+      textColor: BRAND_COLORS.textPrimary,
+    })}
+    <p>This link will expire in <strong>1 hour</strong> for security reasons. If you need a new link, you can request another password reset.</p>
+    ${renderCalloutBox({
+      label: "Security Notice",
+      bodyHtml: `<strong>If you didn't request this password reset, please ignore this email.</strong> Your password will remain unchanged and secure.<br/><br/>If you're concerned about your account security, please contact HR immediately.`,
+      bg: "#FFF3CD",
+      border: "#FFC107",
+      textColor: BRAND_COLORS.textPrimary,
+      labelColor: "#856404",
+    })}
+    <p style="margin-top: 30px; font-size: 14px; color: ${BRAND_COLORS.textSecondary};">
+      If the button doesn't work, copy and paste this link into your browser:
+    </p>
+    <p style="word-break: break-all; color: ${BRAND_COLORS.textSecondary}; font-size: 12px; margin-top: 15px;">
+      ${resetUrl}
+    </p>
   `;
+
+  const html = renderEmailDocument({
+    title: "Password Reset Request - HR System",
+    headerTitle: "Password Reset Request",
+    headerSubtitle: "Reset your HR System password",
+    colors: {
+      headerBg: BRAND_COLORS.primary,
+      headerBg2: BRAND_COLORS.secondary,
+      primary: BRAND_COLORS.primary,
+      secondary: BRAND_COLORS.secondary,
+      accent: BRAND_COLORS.accent,
+      cardBg: BRAND_COLORS.cardBg,
+      cardBorder: BRAND_COLORS.cardBorder,
+      textPrimary: BRAND_COLORS.textPrimary,
+      textSecondary: BRAND_COLORS.textSecondary,
+    },
+    bodyHtml,
+    footerHtml: renderFooter({
+      signature: "",
+      companyName: "PT Rhayakan Film Indonesia",
+      note: "This is an automated email from HR System. Please do not reply to this email.",
+    }),
+  });
 
   const text = `
 Password Reset Request
@@ -3303,172 +1621,59 @@ PT Rhayakan Film Indonesia
 export async function sendPasswordChangedEmail(user) {
   const systemUrl = process.env.FRONTEND_URL || "http://localhost:5173";
 
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <style>
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-          line-height: 1.6;
-          color: ${BRAND_COLORS.textPrimary};
-          margin: 0;
-          padding: 0;
-          background-color: #F9F9F9;
-        }
-        .email-wrapper {
-          width: 100%;
-          background-color: #F9F9F9;
-          padding: 40px 20px;
-        }
-        .container {
-          max-width: 600px;
-          margin: 0 auto;
-          background: ${BRAND_COLORS.accent};
-          border-radius: 12px;
-          overflow: hidden;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        .header {
-          background: linear-gradient(135deg, #28A745 0%, #20C997 100%);
-          color: white;
-          padding: 40px 30px;
-          text-align: center;
-        }
-        .header h1 {
-          margin: 0;
-          font-size: 28px;
-          font-weight: 600;
-          letter-spacing: -0.5px;
-        }
-        .content {
-          padding: 40px 30px;
-        }
-        .content p {
-          margin: 0 0 20px 0;
-          font-size: 16px;
-          line-height: 1.8;
-        }
-        .success-box {
-          background: #E8F5E9;
-          border-left: 4px solid #28A745;
-          padding: 20px;
-          margin: 25px 0;
-          border-radius: 4px;
-        }
-        .success-box p {
-          margin: 5px 0;
-          color: ${BRAND_COLORS.textPrimary};
-        }
-        .warning-box {
-          background: #FFF3CD;
-          border-left: 4px solid #FFC107;
-          padding: 20px;
-          margin: 25px 0;
-          border-radius: 4px;
-        }
-        .warning-box h4 {
-          margin: 0 0 10px 0;
-          font-size: 16px;
-          font-weight: 600;
-          color: #856404;
-        }
-        .warning-box p {
-          margin: 5px 0;
-          color: ${BRAND_COLORS.textPrimary};
-        }
-        .button {
-          display: inline-block;
-          background: #28A745;
-          color: white;
-          padding: 14px 35px;
-          text-decoration: none;
-          border-radius: 8px;
-          font-weight: 600;
-          font-size: 15px;
-          margin-top: 20px;
-          transition: all 0.3s ease;
-        }
-        .button:hover {
-          background: #218838;
-        }
-        .footer {
-          padding: 30px;
-          background: ${BRAND_COLORS.cardBg};
-          text-align: center;
-          color: ${BRAND_COLORS.textSecondary};
-          font-size: 14px;
-          border-top: 1px solid ${BRAND_COLORS.cardBorder};
-        }
-        .footer-signature {
-          font-weight: 600;
-          color: ${BRAND_COLORS.textPrimary};
-          margin-bottom: 10px;
-        }
-
-        @media only screen and (max-width: 600px) {
-          .email-wrapper { padding: 20px 10px; }
-          .content { padding: 30px 20px; }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="email-wrapper">
-        <div class="container">
-          <div class="header">
-            <h1>Password Successfully Changed</h1>
-            <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">
-              Your password has been updated
-            </p>
-          </div>
-
-          <div class="content">
-            <p>Dear <strong>${user.name}</strong>,</p>
-
-            <p>This email confirms that your HR System password was successfully changed.</p>
-
-            <div class="success-box">
-              <p><strong>Change Details:</strong></p>
-              <p>Account: ${user.email}</p>
-              <p>Changed: ${new Date().toLocaleString("en-US", {
-                dateStyle: "medium",
-                timeStyle: "short",
-              })}</p>
-            </div>
-
-            <div class="warning-box">
-              <h4>Didn't make this change?</h4>
-              <p><strong>If you did not change your password, your account may be compromised.</strong></p>
-              <p style="margin-top: 10px;">Please contact HR immediately and change your password again to secure your account.</p>
-            </div>
-
-            <p>You can now log in with your new password.</p>
-
-            <div style="text-align: center;">
-              <a href="${systemUrl}/login" class="button">
-                Go to Login
-              </a>
-            </div>
-
-            <p style="margin-top: 30px; font-size: 14px; color: ${BRAND_COLORS.textSecondary};">
-              If you have any questions, please contact the HR department.
-            </p>
-          </div>
-
-          <div class="footer">
-            <div class="footer-signature">Human Resources Department</div>
-            <div>PT Rhayakan Film Indonesia</div>
-            <div style="margin-top: 15px; font-size: 12px; color: #999;">
-              This is an automated email from HR System. Please do not reply to this email.
-            </div>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
+  const bodyHtml = `
+    <p>Dear <strong>${escapeHtml(user.name)}</strong>,</p>
+    <p>This email confirms that your HR System password was successfully changed.</p>
+    ${renderCalloutBox({
+      label: "Change Details:",
+      bodyHtml: `Account: ${escapeHtml(user.email)}<br/>Changed: ${new Date().toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}`,
+      bg: "#E8F5E9",
+      border: POSITIVE_COLORS.badgeBg,
+      textColor: BRAND_COLORS.textPrimary,
+    })}
+    ${renderCalloutBox({
+      label: "Didn't make this change?",
+      bodyHtml: `<strong>If you did not change your password, your account may be compromised.</strong><br/><br/>Please contact HR immediately and change your password again to secure your account.`,
+      bg: "#FFF3CD",
+      border: "#FFC107",
+      textColor: BRAND_COLORS.textPrimary,
+      labelColor: "#856404",
+    })}
+    <p>You can now log in with your new password.</p>
+    ${renderActionButtons([
+      renderButton({
+        href: `${systemUrl}/login`,
+        text: "Go to Login",
+        bg: POSITIVE_COLORS.badgeBg,
+      }),
+    ])}
+    <p style="margin-top: 30px; font-size: 14px; color: ${BRAND_COLORS.textSecondary};">
+      If you have any questions, please contact the HR department.
+    </p>
   `;
+
+  const html = renderEmailDocument({
+    title: "Password Successfully Changed - HR System",
+    headerTitle: "Password Successfully Changed",
+    headerSubtitle: "Your password has been updated",
+    colors: {
+      headerBg: POSITIVE_COLORS.badgeBg,
+      headerBg2: POSITIVE_COLORS.headerBg2,
+      primary: BRAND_COLORS.primary,
+      secondary: BRAND_COLORS.secondary,
+      accent: BRAND_COLORS.accent,
+      cardBg: BRAND_COLORS.cardBg,
+      cardBorder: BRAND_COLORS.cardBorder,
+      textPrimary: BRAND_COLORS.textPrimary,
+      textSecondary: BRAND_COLORS.textSecondary,
+    },
+    bodyHtml,
+    footerHtml: renderFooter({
+      signature: "",
+      companyName: "PT Rhayakan Film Indonesia",
+      note: "This is an automated email from HR System. Please do not reply to this email.",
+    }),
+  });
 
   const text = `
 Password Successfully Changed
@@ -3527,225 +1732,55 @@ export async function sendPayslipNotificationEmail(employee, payslipDetails) {
   const monthName = monthNames[month - 1];
   const periodText = `${monthName} ${year}`;
 
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <style>
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-          line-height: 1.6;
-          color: ${BRAND_COLORS.textPrimary};
-          margin: 0;
-          padding: 0;
-          background-color: #F9F9F9;
-        }
-        .email-wrapper {
-          width: 100%;
-          background-color: #F9F9F9;
-          padding: 40px 20px;
-        }
-        .container {
-          max-width: 600px;
-          margin: 0 auto;
-          background: ${BRAND_COLORS.accent};
-          border-radius: 12px;
-          overflow: hidden;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        .header {
-          background: linear-gradient(135deg, #10B981 0%, #059669 100%);
-          color: white;
-          padding: 40px 30px;
-          text-align: center;
-        }
-        .header h1 {
-          margin: 0;
-          font-size: 28px;
-          font-weight: 600;
-          letter-spacing: -0.5px;
-        }
-        .header p {
-          margin: 10px 0 0 0;
-          font-size: 16px;
-          opacity: 0.9;
-        }
-        .content {
-          padding: 40px 30px;
-        }
-        .content p {
-          margin: 0 0 20px 0;
-          font-size: 16px;
-          line-height: 1.8;
-        }
-        .highlight-box {
-          background: linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%);
-          border-left: 4px solid #10B981;
-          padding: 20px;
-          margin: 25px 0;
-          border-radius: 8px;
-        }
-        .highlight-box h2 {
-          margin: 0 0 10px 0;
-          font-size: 20px;
-          font-weight: 600;
-          color: #065F46;
-        }
-        .highlight-box p {
-          margin: 5px 0;
-          font-size: 16px;
-          color: ${BRAND_COLORS.textPrimary};
-        }
-        .info-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 15px;
-          margin: 25px 0;
-        }
-        .info-item {
-          background: ${BRAND_COLORS.cardBg};
-          padding: 15px;
-          border-radius: 8px;
-          border: 1px solid ${BRAND_COLORS.cardBorder};
-        }
-        .info-label {
-          font-size: 13px;
-          color: ${BRAND_COLORS.textSecondary};
-          margin-bottom: 5px;
-        }
-        .info-value {
-          font-size: 16px;
-          font-weight: 600;
-          color: ${BRAND_COLORS.textPrimary};
-        }
-        .button {
-          display: inline-block;
-          background: #10B981;
-          color: white;
-          padding: 16px 40px;
-          text-decoration: none;
-          border-radius: 8px;
-          font-weight: 600;
-          font-size: 16px;
-          margin: 20px 0;
-          transition: all 0.3s ease;
-        }
-        .button:hover {
-          background: #059669;
-        }
-        .instructions {
-          background: #EFF6FF;
-          border-left: 4px solid #3B82F6;
-          padding: 20px;
-          margin: 25px 0;
-          border-radius: 4px;
-        }
-        .instructions h4 {
-          margin: 0 0 10px 0;
-          font-size: 16px;
-          font-weight: 600;
-          color: #1E40AF;
-        }
-        .instructions ol {
-          margin: 10px 0;
-          padding-left: 20px;
-        }
-        .instructions li {
-          margin: 8px 0;
-          color: ${BRAND_COLORS.textPrimary};
-        }
-        .footer {
-          padding: 30px;
-          background: ${BRAND_COLORS.cardBg};
-          text-align: center;
-          color: ${BRAND_COLORS.textSecondary};
-          font-size: 14px;
-          border-top: 1px solid ${BRAND_COLORS.cardBorder};
-        }
-        .footer-signature {
-          font-weight: 600;
-          color: ${BRAND_COLORS.textPrimary};
-          margin-bottom: 10px;
-        }
-        .security-note {
-          background: #FEF3C7;
-          border-left: 4px solid #F59E0B;
-          padding: 15px;
-          margin: 25px 0;
-          border-radius: 4px;
-          font-size: 14px;
-        }
-
-        @media only screen and (max-width: 600px) {
-          .email-wrapper { padding: 20px 10px; }
-          .content { padding: 30px 20px; }
-          .info-grid { grid-template-columns: 1fr; }
-          .button { display: block; width: 100%; text-align: center; }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="email-wrapper">
-        <div class="container">
-          <div class="header">
-            <h1>Your Payslip is Ready</h1>
-            <p>Your salary slip for ${periodText} is now available</p>
-          </div>
-
-          <div class="content">
-            <p>Dear <strong>${employee.name}</strong>,</p>
-
-            <p>Good news! Your payslip for <strong>${periodText}</strong> has been uploaded to the HR system and is now ready for download.</p>
-
-            <div class="highlight-box">
-              <h2>Payslip Details</h2>
-              <p><strong>Period:</strong> ${periodText}</p>
-              <p><strong>Employee:</strong> ${employee.name}</p>
-              <p><strong>Status:</strong> Available for Download</p>
-            </div>
-
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="${payslipUrl}" class="button">
-                View My Payslips
-              </a>
-            </div>
-
-            <div class="instructions">
-              <h4>How to Access Your Payslip:</h4>
-              <ol>
-                <li>Click the "View My Payslips" button above or log in to the HR system</li>
-                <li>Navigate to "My Payslips" section</li>
-                <li>Find the payslip for ${periodText}</li>
-                <li>Click "Download PDF" to save your payslip</li>
-              </ol>
-            </div>
-
-            <div class="security-note">
-              <strong>Important:</strong> Your payslip contains confidential salary information. Please keep it secure and do not share it with unauthorized persons.
-            </div>
-
-            <p>If you have any questions about your payslip or notice any discrepancies, please contact the HR department immediately.</p>
-
-            <p style="margin-top: 30px; font-size: 14px; color: ${BRAND_COLORS.textSecondary};">
-              Direct link to payslips page:<br>
-              <a href="${payslipUrl}" style="color: #10B981;">${payslipUrl}</a>
-            </p>
-          </div>
-
-          <div class="footer">
-            <div class="footer-signature">Human Resources Department</div>
-            <div>PT Rhayakan Film Indonesia</div>
-            <div style="margin-top: 15px; font-size: 12px; color: #999;">
-              This is an automated email from HR System. Please do not reply to this email.
-            </div>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
+  const bodyHtml = `
+    <p>Dear <strong>${escapeHtml(employee.name)}</strong>,</p>
+    <p>Good news! Your payslip for <strong>${periodText}</strong> has been uploaded to the HR system and is now ready for download.</p>
+    ${renderInfoCard({
+      title: "Payslip Details",
+      rows: [
+        { label: "Period:", value: periodText },
+        { label: "Employee:", value: employee.name },
+        { label: "Status:", value: "Available for Download" },
+      ],
+    })}
+    ${renderActionButtons([
+      renderButton({
+        href: payslipUrl,
+        text: "View My Payslips",
+        bg: BRAND_COLORS.primary,
+      }),
+    ])}
+    ${renderCalloutBox({
+      bodyHtml: `<strong>Important:</strong> Your payslip contains confidential salary information. Please keep it secure and do not share it with unauthorized persons.`,
+      bg: "#FEF3C7",
+      border: "#F59E0B",
+      textColor: BRAND_COLORS.textPrimary,
+    })}
+    <p>Questions or discrepancies? Contact the HR department.</p>
   `;
+
+  const html = renderEmailDocument({
+    title: "Your Payslip is Ready",
+    headerTitle: "Your Payslip is Ready",
+    headerSubtitle: `Your salary slip for ${periodText} is now available`,
+    colors: {
+      headerBg: POSITIVE_COLORS.headerBg,
+      headerBg2: POSITIVE_COLORS.headerBg2,
+      primary: BRAND_COLORS.primary,
+      secondary: BRAND_COLORS.secondary,
+      accent: BRAND_COLORS.accent,
+      cardBg: BRAND_COLORS.cardBg,
+      cardBorder: BRAND_COLORS.cardBorder,
+      textPrimary: BRAND_COLORS.textPrimary,
+      textSecondary: BRAND_COLORS.textSecondary,
+    },
+    bodyHtml,
+    footerHtml: renderFooter({
+      signature: "",
+      companyName: "PT Rhayakan Film Indonesia",
+      note: "This is an automated email from HR System. Please do not reply to this email.",
+    }),
+  });
 
   const text = `
 Your Payslip is Ready
@@ -3759,17 +1794,11 @@ Payslip Details:
 - Employee: ${employee.name}
 - Status: Available for Download
 
-How to Access Your Payslip:
-1. Log in to the HR system at: ${systemUrl}
-2. Navigate to "My Payslips" section
-3. Find the payslip for ${periodText}
-4. Click "Download PDF" to save your payslip
-
-Direct link: ${payslipUrl}
+View your payslip: ${payslipUrl}
 
 IMPORTANT: Your payslip contains confidential salary information. Please keep it secure.
 
-If you have any questions about your payslip or notice any discrepancies, please contact the HR department immediately.
+Questions or discrepancies? Contact the HR department.
 
 Best regards,
 Human Resources Department
@@ -3886,274 +1915,79 @@ export async function sendLeaveCancellationEmail(
     day: "numeric",
   });
 
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <style>
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-          line-height: 1.6;
-          color: ${BRAND_COLORS.textPrimary};
-          margin: 0;
-          padding: 0;
-          background-color: #F9F9F9;
-        }
-        .email-wrapper {
-          width: 100%;
-          background-color: #F9F9F9;
-          padding: 40px 20px;
-        }
-        .container {
-          max-width: 600px;
-          margin: 0 auto;
-          background: ${BRAND_COLORS.accent};
-          border-radius: 12px;
-          overflow: hidden;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        .header {
-          background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
-          color: ${BRAND_COLORS.accent};
-          padding: 40px 30px;
-          text-align: center;
-        }
-        .header h1 {
-          margin: 0;
-          font-size: 28px;
-          font-weight: 600;
-          letter-spacing: -0.5px;
-        }
-        .content {
-          padding: 40px 30px;
-        }
-        .content p {
-          margin: 0 0 20px 0;
-          font-size: 16px;
-          line-height: 1.8;
-        }
-        .status-badge {
-          display: inline-block;
-          background: #dc2626;
-          color: ${BRAND_COLORS.accent};
-          padding: 10px 24px;
-          border-radius: 25px;
-          font-weight: 600;
-          font-size: 14px;
-          text-transform: uppercase;
-          letter-spacing: 1px;
-          margin: 20px 0;
-        }
-        .details-card {
-          background: ${BRAND_COLORS.cardBg};
-          border: 1px solid ${BRAND_COLORS.cardBorder};
-          border-radius: 10px;
-          padding: 25px;
-          margin: 30px 0;
-        }
-        .details-card h3 {
-          margin: 0 0 20px 0;
-          font-size: 18px;
-          font-weight: 600;
-          color: ${BRAND_COLORS.primary};
-          text-align: center;
-        }
-        .detail-row {
-          display: flex;
-          padding: 12px 0;
-          border-bottom: 1px solid ${BRAND_COLORS.cardBorder};
-        }
-        .detail-row:last-child {
-          border-bottom: none;
-        }
-        .detail-label {
-          font-weight: 600;
-          color: ${BRAND_COLORS.textPrimary};
-          min-width: 140px;
-          flex-shrink: 0;
-        }
-        .detail-value {
-          color: ${BRAND_COLORS.textSecondary};
-          flex: 1;
-        }
-        .alert-box {
-          background: #FEF3C7;
-          border-left: 4px solid #F59E0B;
-          padding: 20px;
-          margin: 25px 0;
-          border-radius: 8px;
-        }
-        .alert-box strong {
-          color: #92400E;
-          display: block;
-          margin-bottom: 8px;
-        }
-        .alert-box p {
-          margin: 0;
-          color: #78350F;
-          font-size: 15px;
-        }
-        .reason-box {
-          background: #FFF7ED;
-          border: 1px solid #FED7AA;
-          padding: 20px;
-          margin: 25px 0;
-          border-radius: 8px;
-        }
-        .reason-box h4 {
-          margin: 0 0 10px 0;
-          color: #92400E;
-          font-size: 16px;
-        }
-        .reason-text {
-          color: #78350F;
-          font-style: italic;
-          margin: 0;
-        }
-        .footer {
-          padding: 30px;
-          background: ${BRAND_COLORS.cardBg};
-          text-align: center;
-          color: ${BRAND_COLORS.textSecondary};
-          font-size: 14px;
-          border-top: 1px solid ${BRAND_COLORS.cardBorder};
-        }
-        .footer-text {
-          margin: 5px 0;
-        }
-        .footer-signature {
-          font-weight: 600;
-          color: ${BRAND_COLORS.textPrimary};
-          margin-bottom: 10px;
-        }
-        .footer-note {
-          font-size: 12px;
-          color: #999999;
-          margin-top: 15px;
-        }
-
-        @media only screen and (max-width: 600px) {
-          .email-wrapper {
-            padding: 20px 10px;
-          }
-          .content {
-            padding: 30px 20px;
-          }
-          .details-card {
-            padding: 20px 15px;
-          }
-          .detail-row {
-            flex-direction: column;
-          }
-          .detail-label {
-            min-width: auto;
-            margin-bottom: 5px;
-          }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="email-wrapper">
-        <div class="container">
-          <div class="header">
-            <h1>Leave Cancelled</h1>
-          </div>
-
-          <div class="content">
-            <p>Dear Team,</p>
-
-            <p><strong>${employee.name}</strong> has cancelled their previously approved leave request.</p>
-
-            <div style="text-align: center;">
-              <div class="status-badge">CANCELLED</div>
-            </div>
-
-            <div class="details-card">
-              <h3>Employee Information</h3>
-
-              <div class="detail-row">
-                <div class="detail-label">Name:</div>
-                <div class="detail-value">${employee.name}</div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Division:</div>
-                <div class="detail-value">${employee.division?.name || "-"}</div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Role:</div>
-                <div class="detail-value">${employee.role?.name || "-"}</div>
-              </div>
-            </div>
-
-            <div class="details-card">
-              <h3>Cancelled Leave Details</h3>
-
-              <div class="detail-row">
-                <div class="detail-label">Leave Type:</div>
-                <div class="detail-value">${leaveTypeLabel}</div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Start Date:</div>
-                <div class="detail-value">${startDate}</div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">End Date:</div>
-                <div class="detail-value">${endDate}</div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Duration:</div>
-                <div class="detail-value">${leaveRequest.totalDays} ${leaveRequest.totalDays === 1 ? "day" : "days"}</div>
-              </div>
-
-              <div class="detail-row">
-                <div class="detail-label">Original Reason:</div>
-                <div class="detail-value">${leaveRequest.reason}</div>
-              </div>
-            </div>
-
-            ${
-              cancellationReason && cancellationReason !== "No reason provided"
-                ? `
-              <div class="reason-box">
-                <h4>Cancellation Reason:</h4>
-                <p class="reason-text">${cancellationReason}</p>
-              </div>
-            `
-                : ""
-            }
-
-            <div class="alert-box">
-              <strong>Important Notice</strong>
-              <p>
-                ${
-                  leaveRequest.leaveType === "ANNUAL_LEAVE"
-                    ? `The employee's leave balance has been restored (+${leaveRequest.totalDays} days).`
-                    : "This cancellation has been recorded in the system."
-                }
-              </p>
-              <p style="margin-top: 10px;">
-                The employee is now expected to be available during the originally scheduled leave dates.
-              </p>
-            </div>
-          </div>
-
-          <div class="footer">
-            <div class="footer-signature">HR Team</div>
-            <div class="footer-text">Human Resources Department</div>
-            <div class="footer-note">This is an automated notification from the HR system.</div>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
+  const bodyHtml = `
+    <p>Dear Team,</p>
+    <p><strong>${escapeHtml(employee.name)}</strong> has cancelled their previously approved leave request.</p>
+    <p style="text-align: center;">${renderStatusBadge("CANCELLED", {
+      bg: "#dc2626",
+    })}</p>
+    ${renderInfoCard({
+      title: "Employee Information",
+      rows: [
+        { label: "Name:", value: employee.name },
+        { label: "Division:", value: employee.division?.name || "-" },
+        { label: "Role:", value: employee.role?.name || "-" },
+      ],
+    })}
+    ${renderInfoCard({
+      title: "Cancelled Leave Details",
+      rows: [
+        { label: "Leave Type:", value: leaveTypeLabel },
+        { label: "Start Date:", value: startDate },
+        { label: "End Date:", value: endDate },
+        {
+          label: "Duration:",
+          value: `${leaveRequest.totalDays} ${leaveRequest.totalDays === 1 ? "day" : "days"}`,
+        },
+        { label: "Original Reason:", value: leaveRequest.reason },
+      ],
+    })}
+    ${
+      cancellationReason && cancellationReason !== "No reason provided"
+        ? renderCalloutBox({
+            label: "Cancellation Reason:",
+            bodyHtml: `<span style="font-style: italic;">${escapeHtml(cancellationReason)}</span>`,
+            bg: "#FFF7ED",
+            border: "#FED7AA",
+            textColor: "#78350F",
+            labelColor: "#92400E",
+          })
+        : ""
+    }
+    ${renderCalloutBox({
+      label: "Important Notice",
+      bodyHtml: `${
+        leaveRequest.leaveType === "ANNUAL_LEAVE"
+          ? `The employee's leave balance has been restored (+${leaveRequest.totalDays} days).`
+          : "This cancellation has been recorded in the system."
+      }<br/><br/>The employee is now expected to be available during the originally scheduled leave dates.`,
+      bg: "#FEF3C7",
+      border: "#F59E0B",
+      textColor: "#78350F",
+      labelColor: "#92400E",
+    })}
   `;
+
+  const html = renderEmailDocument({
+    title: "Leave Cancelled",
+    headerTitle: "Leave Cancelled",
+    colors: {
+      headerBg: "#dc2626",
+      headerBg2: "#991b1b",
+      primary: BRAND_COLORS.primary,
+      secondary: BRAND_COLORS.secondary,
+      accent: BRAND_COLORS.accent,
+      cardBg: BRAND_COLORS.cardBg,
+      cardBorder: BRAND_COLORS.cardBorder,
+      textPrimary: BRAND_COLORS.textPrimary,
+      textSecondary: BRAND_COLORS.textSecondary,
+    },
+    bodyHtml,
+    footerHtml: renderFooter({
+      companyName: "PT Rhayakan Film Indonesia",
+      note: "This is an automated notification from the HR system.",
+    }),
+  });
 
   // Use your existing sendEmail function that calls SMTP2go API
   return sendEmail({
@@ -4210,267 +2044,72 @@ export async function sendAdminRejectOvertimeEmail(
         })
       : "N/A";
 
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            line-height: 1.6;
-            color: ${BRAND_COLORS.textPrimary};
-            margin: 0;
-            padding: 0;
-            background-color: #F9F9F9;
-          }
-          .email-wrapper {
-            width: 100%;
-            background-color: #F9F9F9;
-            padding: 40px 20px;
-          }
-          .container {
-            max-width: 600px;
-            margin: 0 auto;
-            background: ${BRAND_COLORS.accent};
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-          }
-          .header {
-            background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
-            color: ${BRAND_COLORS.accent};
-            padding: 40px 30px;
-            text-align: center;
-          }
-          .header h1 {
-            margin: 0;
-            font-size: 28px;
-            font-weight: 600;
-            letter-spacing: -0.5px;
-          }
-          .content {
-            padding: 40px 30px;
-          }
-          .content p {
-            margin: 0 0 20px 0;
-            font-size: 16px;
-            line-height: 1.8;
-          }
-          .status-badge {
-            display: inline-block;
-            background: #dc2626;
-            color: ${BRAND_COLORS.accent};
-            padding: 10px 24px;
-            border-radius: 25px;
-            font-weight: 600;
-            font-size: 14px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin: 20px 0;
-          }
-          .details-card {
-            background: ${BRAND_COLORS.cardBg};
-            border: 1px solid ${BRAND_COLORS.cardBorder};
-            border-radius: 10px;
-            padding: 25px;
-            margin: 30px 0;
-          }
-          .details-card h3 {
-            margin: 0 0 20px 0;
-            font-size: 18px;
-            font-weight: 600;
-            color: ${BRAND_COLORS.primary};
-            text-align: center;
-          }
-          .detail-row {
-            display: flex;
-            padding: 12px 0;
-            border-bottom: 1px solid ${BRAND_COLORS.cardBorder};
-          }
-          .detail-row:last-child {
-            border-bottom: none;
-          }
-          .detail-label {
-            font-weight: 600;
-            color: ${BRAND_COLORS.textPrimary};
-            min-width: 140px;
-            flex-shrink: 0;
-          }
-          .detail-value {
-            color: ${BRAND_COLORS.textSecondary};
-            flex: 1;
-          }
-          .alert-box {
-            background: #FEF3C7;
-            border-left: 4px solid #F59E0B;
-            padding: 20px;
-            margin: 25px 0;
-            border-radius: 8px;
-          }
-          .alert-box strong {
-            color: #92400E;
-            display: block;
-            margin-bottom: 8px;
-          }
-          .alert-box p {
-            margin: 0;
-            color: #78350F;
-            font-size: 15px;
-          }
-          .reason-box {
-            background: #FFF7ED;
-            border: 2px solid #FED7AA;
-            padding: 20px;
-            margin: 25px 0;
-            border-radius: 10px;
-          }
-          .reason-box h4 {
-            margin: 0 0 10px 0;
-            color: #92400E;
-            font-size: 16px;
-            font-weight: 700;
-          }
-          .reason-text {
-            color: #78350F;
-            font-style: italic;
-            margin: 0;
-            line-height: 1.6;
-          }
-          .footer {
-            padding: 30px;
-            background: ${BRAND_COLORS.cardBg};
-            text-align: center;
-            color: ${BRAND_COLORS.textSecondary};
-            font-size: 14px;
-            border-top: 1px solid ${BRAND_COLORS.cardBorder};
-          }
-          .footer-text {
-            margin: 5px 0;
-          }
-          .footer-signature {
-            font-weight: 600;
-            color: ${BRAND_COLORS.textPrimary};
-            margin-bottom: 10px;
-          }
-          .footer-note {
-            font-size: 12px;
-            color: #999999;
-            margin-top: 15px;
-          }
-
-          @media only screen and (max-width: 600px) {
-            .email-wrapper {
-              padding: 20px 10px;
-            }
-            .content {
-              padding: 30px 20px;
-            }
-            .details-card {
-              padding: 20px 15px;
-            }
-            .detail-row {
-              flex-direction: column;
-            }
-            .detail-label {
-              min-width: auto;
-              margin-bottom: 5px;
-            }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="email-wrapper">
-          <div class="container">
-            <div class="header">
-              <h1>Overtime Rejected by HR Admin</h1>
-            </div>
-
-            <div class="content">
-              <p>Dear <strong>${employee.name}</strong>,</p>
-
-              <p>Your previously <strong>approved</strong> overtime request has been <strong>rejected by HR Administration</strong>.</p>
-
-              <div style="text-align: center;">
-                <div class="status-badge">ADMIN OVERRIDE</div>
-              </div>
-
-              <div class="details-card">
-                <h3>Overtime Details</h3>
-
-                <div class="detail-row">
-                  <div class="detail-label">Employee:</div>
-                  <div class="detail-value">${employee.name}</div>
-                </div>
-
-                <div class="detail-row">
-                  <div class="detail-label">Division:</div>
-                  <div class="detail-value">${employee.division?.name || "-"}</div>
-                </div>
-
-                <div class="detail-row">
-                  <div class="detail-label">Date(s):</div>
-                  <div class="detail-value">${formattedDates}</div>
-                </div>
-
-                <div class="detail-row">
-                  <div class="detail-label">Hours:</div>
-                  <div class="detail-value">${overtimeRequest.totalHours} hours</div>
-                </div>
-
-                <div class="detail-row">
-                  <div class="detail-label">Amount:</div>
-                  <div class="detail-value">${formattedAmount}</div>
-                </div>
-
-                <div class="detail-row">
-                  <div class="detail-label">Originally Approved:</div>
-                  <div class="detail-value">${approvalDate}</div>
-                </div>
-
-                <div class="detail-row">
-                  <div class="detail-label">Rejected By:</div>
-                  <div class="detail-value">${adminName} (HR Admin)</div>
-                </div>
-              </div>
-
-              <div class="reason-box">
-                <h4>Admin Rejection Reason:</h4>
-                <p class="reason-text">"${adminReason}"</p>
-              </div>
-
-              <div class="alert-box">
-                <strong>Balance Adjustment</strong>
-                <p>
-                  Your overtime balance has been adjusted: <strong>-${overtimeRequest.totalHours} hours</strong>
-                </p>
-                <p style="margin-top: 10px;">
-                  This overtime will <strong>not</strong> be included in your payroll.
-                </p>
-              </div>
-
-              <p>
-                If you believe this rejection is in error or have questions, please contact the HR department.
-              </p>
-
-              <p style="margin-top: 30px;">
-                Best regards,<br>
-                <strong>HR Administration</strong>
-              </p>
-            </div>
-
-            <div class="footer">
-              <div class="footer-signature">HR Team</div>
-              <div class="footer-text">Human Resources Department</div>
-              <div class="footer-text">PT Rhaya Flicks Indonesia</div>
-              <div class="footer-note">This is an automated notification from the HR system. For questions, please contact HR directly.</div>
-            </div>
-          </div>
-        </div>
-      </body>
-      </html>
+    const bodyHtml = `
+      <p>Dear <strong>${escapeHtml(employee.name)}</strong>,</p>
+      <p>Your previously <strong>approved</strong> overtime request has been <strong>rejected by HR Administration</strong>.</p>
+      <p style="text-align: center;">${renderStatusBadge("ADMIN OVERRIDE", {
+        bg: "#dc2626",
+      })}</p>
+      ${renderInfoCard({
+        title: "Overtime Details",
+        rows: [
+          { label: "Employee:", value: employee.name },
+          { label: "Division:", value: employee.division?.name || "-" },
+          { label: "Date(s):", value: formattedDates },
+          {
+            label: "Hours:",
+            value: `${overtimeRequest.totalHours} hours`,
+          },
+          { label: "Amount:", value: formattedAmount },
+          { label: "Originally Approved:", value: approvalDate },
+          { label: "Rejected By:", value: `${adminName} (HR Admin)` },
+        ],
+      })}
+      ${renderCalloutBox({
+        label: "Admin Rejection Reason:",
+        bodyHtml: `<span style="font-style: italic;">"${escapeHtml(adminReason)}"</span>`,
+        bg: "#FFF7ED",
+        border: "#FED7AA",
+        textColor: "#78350F",
+        labelColor: "#92400E",
+      })}
+      ${renderCalloutBox({
+        label: "Balance Adjustment",
+        bodyHtml: `Your overtime balance has been adjusted: <strong>-${overtimeRequest.totalHours} hours</strong><br/><br/>This overtime will <strong>not</strong> be included in your payroll.`,
+        bg: "#FEF3C7",
+        border: "#F59E0B",
+        textColor: "#78350F",
+        labelColor: "#92400E",
+      })}
+      <p>
+        If you believe this rejection is in error or have questions, please contact the HR department.
+      </p>
+      <p style="margin-top: 30px;">
+        Best regards,<br>
+        <strong>HR Administration</strong>
+      </p>
     `;
+
+    const html = renderEmailDocument({
+      title: "Overtime Rejected by HR Admin",
+      headerTitle: "Overtime Rejected by HR Admin",
+      colors: {
+        headerBg: "#dc2626",
+        headerBg2: "#991b1b",
+        primary: BRAND_COLORS.primary,
+        secondary: BRAND_COLORS.secondary,
+        accent: BRAND_COLORS.accent,
+        cardBg: BRAND_COLORS.cardBg,
+        cardBorder: BRAND_COLORS.cardBorder,
+        textPrimary: BRAND_COLORS.textPrimary,
+        textSecondary: BRAND_COLORS.textSecondary,
+      },
+      bodyHtml,
+      footerHtml: renderFooter({
+        companyName: "PT Rhayakan Film Indonesia",
+        note: "This is an automated notification from the HR system. For questions, please contact HR directly.",
+      }),
+    });
 
     // Use existing sendEmail helper (SMTP2go API)
     return sendEmail({
@@ -4503,103 +2142,68 @@ export async function sendOvertimePlanApprovedEmail(user, overtimeRequest, { smt
     overtimeRequest.submittedAt || overtimeRequest.createdAt || new Date(),
   );
 
-  const entryRows = entries
-    .map((e) => {
-      const dateStr = new Date(e.date).toLocaleDateString("en-US", {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      });
-      return `
-        <div class="detail-row">
-          <div class="detail-label">${dateStr}</div>
-          <div class="detail-value">${e.plannedHours ?? e.hours}h — ${e.description}</div>
-        </div>`;
-    })
-    .join("");
+  const entryRows = entries.map((e) => {
+    const dateStr = new Date(e.date).toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+    return {
+      label: dateStr,
+      value: `${e.plannedHours ?? e.hours}h — ${e.description}`,
+    };
+  });
 
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #000000; margin: 0; padding: 0; background-color: #F9F9F9; }
-        .email-wrapper { width: 100%; background-color: #F9F9F9; padding: 40px 20px; }
-        .container { max-width: 600px; margin: 0 auto; background: #FFFFFF; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-        .header { background: linear-gradient(135deg, #152A55 0%, #000000 100%); color: #FFFFFF; padding: 40px 30px; text-align: center; }
-        .header h1 { margin: 0; font-size: 26px; font-weight: 600; }
-        .header p  { margin: 8px 0 0 0; font-size: 14px; opacity: 0.8; }
-        .content { padding: 40px 30px; }
-        .content p { margin: 0 0 20px 0; font-size: 16px; line-height: 1.8; }
-        .status-badge { display: inline-block; background: #152A55; color: #FFFFFF; padding: 10px 24px; border-radius: 25px; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; margin: 16px 0; }
-        .info-box { background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 10px; padding: 16px 20px; margin: 20px 0; font-size: 14px; color: #1E40AF; }
-        .details-card { background: #F5F5F5; border: 1px solid #E0E0E0; border-radius: 10px; padding: 25px; margin: 24px 0; }
-        .details-card h3 { margin: 0 0 18px 0; font-size: 16px; font-weight: 600; color: #152A55; }
-        .detail-row { display: flex; padding: 10px 0; border-bottom: 1px solid #E0E0E0; font-size: 14px; }
-        .detail-row:last-child { border-bottom: none; }
-        .detail-label { font-weight: 600; color: #000000; min-width: 160px; flex-shrink: 0; }
-        .detail-value { color: #666666; flex: 1; }
-        .button { display: inline-block; background: #152A55; color: #FFFFFF; padding: 14px 35px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; margin-top: 20px; }
-        .footer { padding: 30px; background: #F5F5F5; text-align: center; color: #666666; font-size: 14px; border-top: 1px solid #E0E0E0; }
-        .footer-signature { font-weight: 600; color: #000000; margin-bottom: 6px; }
-        .footer-note { font-size: 12px; color: #999999; margin-top: 12px; }
-        @media only screen and (max-width: 600px) {
-          .email-wrapper { padding: 20px 10px; }
-          .content { padding: 30px 20px; }
-          .detail-row { flex-direction: column; }
-          .detail-label { min-width: auto; margin-bottom: 4px; }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="email-wrapper">
-        <div class="container">
-          <div class="header">
-            <h1>✅ Overtime Plan Approved</h1>
-            <p>Your overtime plan has been approved</p>
-          </div>
-
-          <div class="content">
-            <p>Hi <strong>${user.name}</strong>,</p>
-
-            <div class="status-badge">PLAN APPROVED</div>
-
-            <p>
-              Your supervisor has approved your overtime plan.
-              You are cleared to proceed with the planned overtime on the scheduled date(s).
-            </p>
-
-            <div class="info-box">
-              📋 <strong>Next step:</strong> After completing the overtime, please submit your
-              actual hours in the HR system within <strong>7 days</strong>. The system will
-              remind you automatically.
-            </div>
-
-            <div class="details-card">
-              <h3>Approved Plan — ${totalHours}h total</h3>
-              ${entryRows}
-            </div>
-
-            ${
-              process.env.FRONTEND_URL
-                ? `<a href="${process.env.FRONTEND_URL}/overtime/my-requests" class="button">View My Requests</a>`
-                : ""
-            }
-          </div>
-
-          <div class="footer">
-            <div class="footer-signature">HR Team</div>
-            <div>Human Resources Department</div>
-            <div class="footer-note">This is an automated notification from the HR system.</div>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
+  const bodyHtml = `
+    <p>Hi <strong>${escapeHtml(user.name)}</strong>,</p>
+    <p>${renderStatusBadge("PLAN APPROVED", { bg: POSITIVE_COLORS.badgeBg })}</p>
+    <p>
+      Your supervisor has approved your overtime plan.
+      You are cleared to proceed with the planned overtime on the scheduled date(s).
+    </p>
+    ${renderCalloutBox({
+      bodyHtml: `📋 <strong>Next step:</strong> After completing the overtime, please submit your actual hours in the HR system within <strong>7 days</strong>. The system will remind you automatically.`,
+      bg: "#EFF6FF",
+      border: "#BFDBFE",
+      textColor: "#1E40AF",
+    })}
+    ${renderInfoCard({
+      title: `Approved Plan — ${totalHours}h total`,
+      rows: entryRows,
+    })}
+    ${
+      process.env.FRONTEND_URL
+        ? renderButton({
+            href: `${process.env.FRONTEND_URL}/overtime/my-requests`,
+            text: "View My Requests",
+            bg: "#152A55",
+          })
+        : ""
+    }
   `;
+
+  const html = renderEmailDocument({
+    title: "Overtime Plan Approved — Please Actualize After Completion",
+    headerTitle: "✅ Overtime Plan Approved",
+    headerSubtitle: "Your overtime plan has been approved",
+    colors: {
+      headerBg: POSITIVE_COLORS.headerBg,
+      headerBg2: POSITIVE_COLORS.headerBg2,
+      primary: BRAND_COLORS.primary,
+      secondary: BRAND_COLORS.secondary,
+      accent: BRAND_COLORS.accent,
+      cardBg: BRAND_COLORS.cardBg,
+      cardBorder: BRAND_COLORS.cardBorder,
+      textPrimary: BRAND_COLORS.textPrimary,
+      textSecondary: BRAND_COLORS.textSecondary,
+    },
+    bodyHtml,
+    footerHtml: renderFooter({
+      companyName: "PT Rhayakan Film Indonesia",
+      note: "This is an automated notification from the HR system.",
+    }),
+  });
 
   return sendEmail({
     to: user.email,
@@ -4625,21 +2229,18 @@ export async function sendOvertimeActualizationNeededEmail(
   const entries = overtimeRequest.entries || [];
   const totalHours = overtimeRequest.totalHours || 0;
 
-  const entryRows = entries
-    .map((e) => {
-      const dateStr = new Date(e.date).toLocaleDateString("en-US", {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      });
-      return `
-        <div class="detail-row">
-          <div class="detail-label">${dateStr}</div>
-          <div class="detail-value">Planned: ${e.plannedHours ?? e.hours}h — ${e.description}</div>
-        </div>`;
-    })
-    .join("");
+  const entryRows = entries.map((e) => {
+    const dateStr = new Date(e.date).toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+    return {
+      label: dateStr,
+      value: `Planned: ${e.plannedHours ?? e.hours}h — ${e.description}`,
+    };
+  });
 
   // Deadline: 7 days from latest entry date
   const latestDate = entries.reduce((latest, e) => {
@@ -4656,100 +2257,62 @@ export async function sendOvertimeActualizationNeededEmail(
     day: "numeric",
   });
 
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #000000; margin: 0; padding: 0; background-color: #F9F9F9; }
-        .email-wrapper { width: 100%; background-color: #F9F9F9; padding: 40px 20px; }
-        .container { max-width: 600px; margin: 0 auto; background: #FFFFFF; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-        .header { background: linear-gradient(135deg, #7C3AED 0%, #152A55 100%); color: #FFFFFF; padding: 40px 30px; text-align: center; }
-        .header h1 { margin: 0; font-size: 26px; font-weight: 600; }
-        .header p  { margin: 8px 0 0 0; font-size: 14px; opacity: 0.8; }
-        .content { padding: 40px 30px; }
-        .content p { margin: 0 0 20px 0; font-size: 16px; line-height: 1.8; }
-        .status-badge { display: inline-block; background: #7C3AED; color: #FFFFFF; padding: 10px 24px; border-radius: 25px; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; margin: 16px 0; }
-        .deadline-box { background: #FEF3C7; border: 1px solid #FCD34D; border-radius: 10px; padding: 16px 20px; margin: 20px 0; font-size: 14px; color: #92400E; }
-        .steps-box { background: #F0FDF4; border: 1px solid #86EFAC; border-radius: 10px; padding: 16px 20px; margin: 20px 0; font-size: 14px; color: #166534; }
-        .steps-box ol { margin: 8px 0 0 0; padding-left: 20px; }
-        .steps-box li { margin-bottom: 6px; }
-        .details-card { background: #F5F5F5; border: 1px solid #E0E0E0; border-radius: 10px; padding: 25px; margin: 24px 0; }
-        .details-card h3 { margin: 0 0 18px 0; font-size: 16px; font-weight: 600; color: #152A55; }
-        .detail-row { display: flex; padding: 10px 0; border-bottom: 1px solid #E0E0E0; font-size: 14px; }
-        .detail-row:last-child { border-bottom: none; }
-        .detail-label { font-weight: 600; color: #000000; min-width: 160px; flex-shrink: 0; }
-        .detail-value { color: #666666; flex: 1; }
-        .button { display: inline-block; background: #7C3AED; color: #FFFFFF; padding: 14px 35px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; margin-top: 20px; }
-        .footer { padding: 30px; background: #F5F5F5; text-align: center; color: #666666; font-size: 14px; border-top: 1px solid #E0E0E0; }
-        .footer-signature { font-weight: 600; color: #000000; margin-bottom: 6px; }
-        .footer-note { font-size: 12px; color: #999999; margin-top: 12px; }
-        @media only screen and (max-width: 600px) {
-          .email-wrapper { padding: 20px 10px; }
-          .content { padding: 30px 20px; }
-          .detail-row { flex-direction: column; }
-          .detail-label { min-width: auto; margin-bottom: 4px; }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="email-wrapper">
-        <div class="container">
-          <div class="header">
-            <h1>⏰ Actualization Required</h1>
-            <p>Please submit your actual overtime hours</p>
-          </div>
-
-          <div class="content">
-            <p>Hi <strong>${user.name}</strong>,</p>
-
-            <div class="status-badge">ACTION NEEDED</div>
-
-            <p>
-              Your approved overtime plan has passed. Please log into the HR system
-              and submit your <strong>actual hours</strong> worked.
-            </p>
-
-            <div class="deadline-box">
-              ⚠️ <strong>Deadline:</strong> ${deadlineStr}
-              <br>Please actualize before this date to ensure your overtime is counted.
-            </div>
-
-            <div class="steps-box">
-              <strong>How to actualize:</strong>
-              <ol>
-                <li>Go to <em>Overtime → Needs Actualization</em></li>
-                <li>Find this request and click <em>Actualize</em></li>
-                <li>Enter the actual hours for each date</li>
-                <li>Enter <strong>0</strong> for any date where overtime was cancelled</li>
-                <li>Submit — if actual ≤ planned, it auto-approves</li>
-              </ol>
-            </div>
-
-            <div class="details-card">
-              <h3>Original Plan — ${totalHours}h planned</h3>
-              ${entryRows}
-            </div>
-
-            ${
-              process.env.FRONTEND_URL
-                ? `<a href="${process.env.FRONTEND_URL}/overtime/pending-actualization" class="button">Actualize Now</a>`
-                : ""
-            }
-          </div>
-
-          <div class="footer">
-            <div class="footer-signature">HR Team</div>
-            <div>Human Resources Department</div>
-            <div class="footer-note">This is an automated notification from the HR system.</div>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
+  const bodyHtml = `
+    <p>Hi <strong>${escapeHtml(user.name)}</strong>,</p>
+    <p>${renderStatusBadge("ACTION NEEDED", { bg: "#7C3AED" })}</p>
+    <p>
+      Your approved overtime plan has passed. Please log into the HR system
+      and submit your <strong>actual hours</strong> worked.
+    </p>
+    ${renderCalloutBox({
+      bodyHtml: `⚠️ <strong>Deadline:</strong> ${deadlineStr}<br>Please actualize before this date to ensure your overtime is counted.`,
+      bg: "#FEF3C7",
+      border: "#FCD34D",
+      textColor: "#92400E",
+    })}
+    ${renderCalloutBox({
+      label: "How to actualize:",
+      bodyHtml: `<ol style="margin: 8px 0 0 0; padding-left: 20px;"><li style="margin-bottom: 6px;">Go to <em>Overtime → Needs Actualization</em></li><li style="margin-bottom: 6px;">Find this request and click <em>Actualize</em></li><li style="margin-bottom: 6px;">Enter the actual hours for each date</li><li style="margin-bottom: 6px;">Enter <strong>0</strong> for any date where overtime was cancelled</li><li style="margin-bottom: 6px;">Submit — if actual ≤ planned, it auto-approves</li></ol>`,
+      bg: "#F0FDF4",
+      border: "#86EFAC",
+      textColor: "#166534",
+    })}
+    ${renderInfoCard({
+      title: `Original Plan — ${totalHours}h planned`,
+      rows: entryRows,
+    })}
+    ${
+      process.env.FRONTEND_URL
+        ? renderButton({
+            href: `${process.env.FRONTEND_URL}/overtime/pending-actualization`,
+            text: "Actualize Now",
+            bg: "#7C3AED",
+          })
+        : ""
+    }
   `;
+
+  const html = renderEmailDocument({
+    title: "Actualization Required",
+    headerTitle: "⏰ Actualization Required",
+    headerSubtitle: "Please submit your actual overtime hours",
+    colors: {
+      headerBg: "#7C3AED",
+      headerBg2: "#152A55",
+      primary: BRAND_COLORS.primary,
+      secondary: BRAND_COLORS.secondary,
+      accent: BRAND_COLORS.accent,
+      cardBg: BRAND_COLORS.cardBg,
+      cardBorder: BRAND_COLORS.cardBorder,
+      textPrimary: BRAND_COLORS.textPrimary,
+      textSecondary: BRAND_COLORS.textSecondary,
+    },
+    bodyHtml,
+    footerHtml: renderFooter({
+      companyName: "PT Rhayakan Film Indonesia",
+      note: "This is an automated notification from the HR system.",
+    }),
+  });
 
   return sendEmail({
     to: user.email,
@@ -4783,44 +2346,66 @@ export async function sendContractExpiryReminderEmail(
   });
 
   const statusColor = isExpired ? "#DC2626" : daysUntilExpiry <= 7 ? "#D97706" : BRAND_COLORS.primary;
+  const statusColor2 = isExpired ? "#991B1B" : daysUntilExpiry <= 7 ? "#92400E" : BRAND_COLORS.secondary;
   const headline = isExpired ? "Contract Expired" : `Contract Expiring — H-${daysUntilExpiry}`;
   const subject = isExpired
     ? `Contract Expired: ${employee.name}${employee.nip ? ` (${employee.nip})` : ""}`
     : `Contract Expiring in ${daysUntilExpiry} Day${daysUntilExpiry === 1 ? "" : "s"}: ${employee.name}`;
 
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background:#F9F9F9; margin:0; padding:0;">
-      <div style="max-width:600px;margin:0 auto;padding:40px 20px;">
-        <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.1);">
-          <div style="background:${statusColor};color:#fff;padding:30px;text-align:center;">
-            <h1 style="margin:0;font-size:22px;">${headline}</h1>
-          </div>
-          <div style="padding:30px;">
-            <p style="font-size:15px;color:${BRAND_COLORS.textPrimary};">
-              ${
-                isExpired
-                  ? "This employee's contract has <strong>expired</strong>. Please review and take action (renew, extend, or process offboarding)."
-                  : `This employee's contract is set to expire in <strong>${daysUntilExpiry} day${daysUntilExpiry === 1 ? "" : "s"}</strong>. Please review and plan for renewal or offboarding.`
-              }
-            </p>
-            <div style="background:${BRAND_COLORS.cardBg};border:1px solid ${BRAND_COLORS.cardBorder};border-radius:10px;padding:20px;margin:20px 0;">
-              <table style="width:100%;font-size:14px;color:${BRAND_COLORS.textPrimary};">
-                <tr><td style="padding:6px 0;font-weight:600;width:140px;">Employee</td><td>${employee.name}</td></tr>
-                <tr><td style="padding:6px 0;font-weight:600;">NIP</td><td>${employee.nip || "N/A"}</td></tr>
-                <tr><td style="padding:6px 0;font-weight:600;">Division</td><td>${employee.division?.name || "N/A"}</td></tr>
-                <tr><td style="padding:6px 0;font-weight:600;">Status</td><td>${employee.employeeStatus}</td></tr>
-                <tr><td style="padding:6px 0;font-weight:600;">Contract End</td><td>${contractEndStr}</td></tr>
-              </table>
-            </div>
-            <p style="font-size:13px;color:${BRAND_COLORS.textSecondary};">View or update this employee's contract details in the HR system.</p>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
+  const bodyHtml = `
+    <p style="text-align: center;">${renderStatusBadge(isExpired ? "EXPIRED" : "EXPIRING SOON", {
+      bg: statusColor,
+    })}</p>
+    <p>
+      ${
+        isExpired
+          ? "This employee's contract has <strong>expired</strong>. Please review and take action (renew, extend, or process offboarding)."
+          : `This employee's contract is set to expire in <strong>${daysUntilExpiry} day${daysUntilExpiry === 1 ? "" : "s"}</strong>. Please review and plan for renewal or offboarding.`
+      }
+    </p>
+    ${renderInfoCard({
+      title: "Contract Details",
+      rows: [
+        { label: "Employee", value: employee.name },
+        { label: "NIP", value: employee.nip || "N/A" },
+        { label: "Division", value: employee.division?.name || "N/A" },
+        { label: "Status", value: employee.employeeStatus },
+        { label: "Contract End", value: contractEndStr },
+      ],
+    })}
+    ${
+      process.env.FRONTEND_URL && employee.id
+        ? renderActionButtons([
+            renderButton({
+              href: `${process.env.FRONTEND_URL}/employees/${employee.id}`,
+              text: "View Employee Record",
+              bg: BRAND_COLORS.primary,
+            }),
+          ])
+        : ""
+    }
   `;
+
+  const html = renderEmailDocument({
+    title: headline,
+    headerTitle: headline,
+    colors: {
+      headerBg: statusColor,
+      headerBg2: statusColor2,
+      primary: BRAND_COLORS.primary,
+      secondary: BRAND_COLORS.secondary,
+      accent: BRAND_COLORS.accent,
+      cardBg: BRAND_COLORS.cardBg,
+      cardBorder: BRAND_COLORS.cardBorder,
+      textPrimary: BRAND_COLORS.textPrimary,
+      textSecondary: BRAND_COLORS.textSecondary,
+    },
+    bodyHtml,
+    footerHtml: renderFooter({
+      companyName: "PT Rhayakan Film Indonesia",
+      note: "This is an automated notification from the HR system.",
+    }),
+  });
 
   return sendEmail({
     to: hrEmail || process.env.HR_EMAIL || "hr@rhayaflicks.com",

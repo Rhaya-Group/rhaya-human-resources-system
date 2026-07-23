@@ -1,12 +1,16 @@
 // backend/src/routes/policyTemplate.routes.js
 import express from "express";
 import { authenticate, requireRole } from "../middleware/auth.js";
+import { uploadDocument as multerUploadLogo } from "../config/upload.js";
 import {
   getAllTemplates,
   getTemplateById,
   createTemplate,
   updateTemplate,
   deleteTemplate,
+  uploadPayslipLogo,
+  getPayslipLogoUrl,
+  deletePayslipLogo,
   getAllAssignments,
   createAssignments,
   updateAssignment,
@@ -160,5 +164,10 @@ router.get("/:id", requireRole([1]), getTemplateById);
 router.post("/", requireRole([1]), createTemplate);
 router.put("/:id", requireRole([1]), updateTemplate);
 router.delete("/:id", requireRole([1]), deleteTemplate);
+
+// Payslip logo (multipart)
+router.post("/:id/logo", requireRole([1]), multerUploadLogo.single("file"), uploadPayslipLogo);
+router.get("/:id/logo", requireRole([1]), getPayslipLogoUrl);
+router.delete("/:id/logo", requireRole([1]), deletePayslipLogo);
 
 export default router;

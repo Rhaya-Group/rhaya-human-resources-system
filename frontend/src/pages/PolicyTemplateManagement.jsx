@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import {
   Shield, Plus, Edit2, Trash2, ChevronDown, ChevronUp,
-  Link, Tag, Building2, Users, X, Info, Mail, Server,
+  Link, Tag, Building2, Users, X, Info, Mail, Server, Image, Upload,
 } from 'lucide-react';
 import apiClient from '../api/client';
 
@@ -38,6 +38,7 @@ const BLANK_TEMPLATE = {
 export default function PolicyTemplateManagement() {
   const [templates,    setTemplates]    = useState([]);
   const [groups,       setGroups]       = useState([]);
+  const [subgroups,    setSubgroups]    = useState([]);
   const [entities,     setEntities]     = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [showTplModal, setShowTplModal] = useState(false);
@@ -50,13 +51,15 @@ export default function PolicyTemplateManagement() {
   async function fetchAll() {
     try {
       setLoading(true);
-      const [tplRes, grpRes, entRes] = await Promise.all([
+      const [tplRes, grpRes, sgrpRes, entRes] = await Promise.all([
         apiClient.get('/policy-templates'),
         apiClient.get('/entity-groups'),
+        apiClient.get('/entity-subgroups'),
         apiClient.get('/plotting-companies'),
       ]);
       setTemplates(tplRes.data.data  || []);
       setGroups(grpRes.data.data     || []);
+      setSubgroups(sgrpRes.data.data || []);
       setEntities(entRes.data.data   || []);
     } catch (err) {
       console.error(err);
@@ -167,6 +170,7 @@ export default function PolicyTemplateManagement() {
         <AssignmentModal
           template={assigningTpl}
           groups={groups}
+          subgroups={subgroups}
           entities={entities}
           existingAssignments={assigningTpl.assignments || []}
           onClose={() => setShowAsnModal(false)}
@@ -183,8 +187,9 @@ function TemplateCard({ template, onEdit, onDelete, onAssign, onDeleteAssignment
   const [expanded, setExpanded] = useState(false);
 
   const assignments = template.assignments || [];
-  const entityAssignments = assignments.filter(a => a.entityId);
-  const groupAssignments  = assignments.filter(a => a.entityGroupId);
+  const entityAssignments   = assignments.filter(a => a.entityId);
+  const groupAssignments    = assignments.filter(a => a.entityGroupId);
+  const subgroupAssignments = assignments.filter(a => a.entitySubgroupId);
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
@@ -332,6 +337,31 @@ function TemplateCard({ template, onEdit, onDelete, onAssign, onDeleteAssignment
                   </div>
                 ))}
 
+                {/* Subgroup assignments */}
+                {subgroupAssignments.map(a => (
+                  <div key={a.id}
+                    className="flex items-center gap-3 py-1.5 px-3 bg-white rounded border border-gray-200"
+                  >
+                    <Tag className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                    <span
+                      className="text-xs font-medium px-2 py-0.5 rounded"
+                      style={{ backgroundColor: `${a.entitySubgroup?.color}20`, color: a.entitySubgroup?.color }}
+                    >
+                      {a.entitySubgroup?.name}
+                    </span>
+                    <span className="text-xs text-gray-400">subgroup</span>
+                    <span className="ml-auto text-xs bg-gray-100 px-2 py-0.5 rounded text-gray-600">
+                      priority {a.priority}
+                    </span>
+                    {a.label && <span className="text-xs text-gray-500 italic">{a.label}</span>}
+                    <button onClick={() => onDeleteAssignment(a.id)}
+                      className="text-red-400 hover:text-red-600 ml-1"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+
                 {/* Entity assignments */}
                 {entityAssignments.map(a => (
                   <div key={a.id}
@@ -391,6 +421,62 @@ function TemplateModal({ editing, onClose, onSaved }) {
     : { ...BLANK_TEMPLATE }
   );
   const [saving, setSaving] = useState(false);
+  const [logoUrl, setLogoUrl] = useState(null);
+  const [logoLoading, setLogoLoading] = useState(!!editing);
+  const [logoUploading, setLogoUploading] = useState(false);
+
+  useEffect(() => {
+    if (!editing) return;
+    let cancelled = false;
+    apiClient.get(`/policy-templates/${editing.id}/logo`)
+      .then(res => { if (!cancelled) setLogoUrl(res.data.data?.url || null); })
+      .catch(() => { if (!cancelled) setLogoUrl(null); })
+      .finally(() => { if (!cancelled) setLogoLoading(false); });
+    return () => { cancelled = true; };
+  }, [editing]);
+
+  async function handleLogoUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/jpg'].includes(file.type)) {
+      alert('Logo must be PNG or JPEG');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Logo must be under 2MB');
+      e.target.value = '';
+      return;
+    }
+    try {
+      setLogoUploading(true);
+      const formData = new FormData();
+      formData.append('file', file);
+      await apiClient.post(`/policy-templates/${editing.id}/logo`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const res = await apiClient.get(`/policy-templates/${editing.id}/logo`);
+      setLogoUrl(res.data.data?.url || null);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to upload logo');
+    } finally {
+      setLogoUploading(false);
+      e.target.value = '';
+    }
+  }
+
+  async function handleLogoRemove() {
+    if (!confirm('Remove this template\'s payslip logo? Payslips will fall back to the default logo.')) return;
+    try {
+      setLogoUploading(true);
+      await apiClient.delete(`/policy-templates/${editing.id}/logo`);
+      setLogoUrl(null);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to remove logo');
+    } finally {
+      setLogoUploading(false);
+    }
+  }
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const toggleApprover = (field, val) => setForm(f => ({
@@ -593,6 +679,44 @@ function TemplateModal({ editing, onClose, onSaved }) {
 
             <hr />
 
+            {/* Payslip Logo */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <Image className="w-4 h-4 text-indigo-500" />
+                Payslip Logo
+              </h3>
+              {!editing ? (
+                <p className="text-xs text-gray-400">Save the template first, then come back to upload a logo.</p>
+              ) : logoLoading ? (
+                <p className="text-xs text-gray-400">Loading...</p>
+              ) : (
+                <div className="flex items-center gap-3">
+                  {logoUrl ? (
+                    <img src={logoUrl} alt="Payslip logo" className="h-12 w-auto max-w-[160px] object-contain border border-gray-200 rounded-lg p-1 bg-white" />
+                  ) : (
+                    <div className="h-12 w-24 flex items-center justify-center border border-dashed border-gray-300 rounded-lg text-xs text-gray-400">
+                      No logo
+                    </div>
+                  )}
+                  <label className="px-3 py-2 border border-gray-300 rounded-lg text-sm cursor-pointer hover:bg-gray-50 flex items-center gap-1.5">
+                    <Upload className="w-3.5 h-3.5" />
+                    {logoUploading ? 'Uploading...' : logoUrl ? 'Replace' : 'Upload'}
+                    <input type="file" accept="image/png,image/jpeg" className="hidden"
+                      onChange={handleLogoUpload} disabled={logoUploading} />
+                  </label>
+                  {logoUrl && (
+                    <button type="button" onClick={handleLogoRemove} disabled={logoUploading}
+                      className="text-red-500 hover:text-red-700 text-sm">
+                      Remove
+                    </button>
+                  )}
+                </div>
+              )}
+              <p className="text-xs text-gray-400 mt-1">PNG or JPEG, under 2MB. Falls back to the default logo if not set. Used on payslips for entities under this template.</p>
+            </div>
+
+            <hr />
+
             {/* HR Contact & SMTP */}
             <div>
               <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
@@ -660,13 +784,14 @@ function TemplateModal({ editing, onClose, onSaved }) {
 // ─── Assignment Modal ─────────────────────────────────────────────────────────
 // Select multiple entities and/or groups + set priority for each
 
-function AssignmentModal({ template, groups, entities, existingAssignments, onClose, onSaved }) {
+function AssignmentModal({ template, groups, subgroups, entities, existingAssignments, onClose, onSaved }) {
   // Already-assigned IDs for this template
-  const assignedEntityIds = new Set(existingAssignments.filter(a=>a.entityId).map(a=>a.entityId));
-  const assignedGroupIds  = new Set(existingAssignments.filter(a=>a.entityGroupId).map(a=>a.entityGroupId));
+  const assignedEntityIds    = new Set(existingAssignments.filter(a=>a.entityId).map(a=>a.entityId));
+  const assignedGroupIds     = new Set(existingAssignments.filter(a=>a.entityGroupId).map(a=>a.entityGroupId));
+  const assignedSubgroupIds  = new Set(existingAssignments.filter(a=>a.entitySubgroupId).map(a=>a.entitySubgroupId));
 
-  const [tab, setTab]         = useState('entities'); // 'entities' | 'groups'
-  const [selected, setSelected] = useState([]); // [{ entityId|entityGroupId, priority, label }]
+  const [tab, setTab]         = useState('entities'); // 'entities' | 'subgroups' | 'groups'
+  const [selected, setSelected] = useState([]); // [{ entityId|entityGroupId|entitySubgroupId, priority, label }]
   const [priority, setPriority] = useState(10);
   const [label, setLabel]       = useState('');
   const [saving, setSaving]     = useState(false);
@@ -685,8 +810,16 @@ function AssignmentModal({ template, groups, entities, existingAssignments, onCl
     });
   }
 
-  function isSelectedEntity(id) { return !!selected.find(s => s.entityId === id); }
-  function isSelectedGroup(id)  { return !!selected.find(s => s.entityGroupId === id); }
+  function toggleSubgroup(id) {
+    setSelected(prev => {
+      if (prev.find(s => s.entitySubgroupId === id)) return prev.filter(s => s.entitySubgroupId !== id);
+      return [...prev, { entitySubgroupId: id }];
+    });
+  }
+
+  function isSelectedEntity(id)   { return !!selected.find(s => s.entityId === id); }
+  function isSelectedGroup(id)    { return !!selected.find(s => s.entityGroupId === id); }
+  function isSelectedSubgroup(id) { return !!selected.find(s => s.entitySubgroupId === id); }
 
   async function handleSave() {
     if (selected.length === 0) return alert('Select at least one entity or group');
@@ -711,8 +844,9 @@ function AssignmentModal({ template, groups, entities, existingAssignments, onCl
     }
   }
 
-  const availableEntities = entities.filter(e => !assignedEntityIds.has(e.id));
-  const availableGroups   = groups.filter(g => !assignedGroupIds.has(g.id));
+  const availableEntities   = entities.filter(e => !assignedEntityIds.has(e.id));
+  const availableGroups     = groups.filter(g => !assignedGroupIds.has(g.id));
+  const availableSubgroups  = subgroups.filter(s => !assignedSubgroupIds.has(s.id));
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -752,6 +886,13 @@ function AssignmentModal({ template, groups, entities, existingAssignments, onCl
               <Building2 className="w-4 h-4 inline mr-1" />
               Entities ({selected.filter(s=>s.entityId).length} selected)
             </button>
+            <button type="button" onClick={() => setTab('subgroups')}
+              className={`flex-1 py-2 text-sm font-medium ${
+                tab === 'subgroups' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'
+              }`}>
+              <Tag className="w-4 h-4 inline mr-1" />
+              Subgroups ({selected.filter(s=>s.entitySubgroupId).length} selected)
+            </button>
             <button type="button" onClick={() => setTab('groups')}
               className={`flex-1 py-2 text-sm font-medium ${
                 tab === 'groups' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'
@@ -784,6 +925,29 @@ function AssignmentModal({ template, groups, entities, existingAssignments, onCl
                           {e.group.name}
                         </span>
                       )}
+                    </label>
+                  ))
+            ) : tab === 'subgroups' ? (
+              availableSubgroups.length === 0
+                ? <p className="text-sm text-gray-400 text-center py-4">All subgroups already assigned</p>
+                : availableSubgroups.map(sg => (
+                    <label key={sg.id}
+                      className="flex items-center gap-3 p-2.5 hover:bg-gray-50 rounded-lg border border-gray-100 cursor-pointer"
+                    >
+                      <input type="checkbox"
+                        checked={isSelectedSubgroup(sg.id)}
+                        onChange={() => toggleSubgroup(sg.id)}
+                        className="w-4 h-4 text-blue-600 rounded" />
+                      <span className="w-3 h-3 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: sg.color }} />
+                      <span className="text-sm text-gray-800 flex-1">{sg.name}</span>
+                      {sg.group && (
+                        <span className="text-xs px-2 py-0.5 rounded"
+                          style={{ backgroundColor: `${sg.group.color}20`, color: sg.group.color }}>
+                          {sg.group.name}
+                        </span>
+                      )}
+                      <span className="text-xs text-gray-400">{sg.code}</span>
                     </label>
                   ))
             ) : (

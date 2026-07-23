@@ -4,6 +4,11 @@ import {
   invalidatePolicyCache,
   clearPolicyCache,
 } from "../helpers/policyResolver.js";
+import { uploadCompanyFile, deleteFromR2, getR2DownloadUrl } from "../config/storage.js";
+
+// PNG/JPEG only — ExcelJS's addImage (used to embed the logo into payslips)
+// only supports png/jpeg/gif, not SVG.
+const LOGO_ALLOWED_MIME_TYPES = ["image/png", "image/jpeg", "image/jpg"];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -34,8 +39,12 @@ export const getAllTemplates = async (req, res) => {
             label: true,
             entityId: true,
             entityGroupId: true,
+            entitySubgroupId: true,
             entity: { select: { id: true, code: true, name: true } },
             entityGroup: {
+              select: { id: true, code: true, name: true, color: true },
+            },
+            entitySubgroup: {
               select: { id: true, code: true, name: true, color: true },
             },
           },
@@ -63,6 +72,9 @@ export const getTemplateById = async (req, res) => {
           include: {
             entity: { select: { id: true, code: true, name: true } },
             entityGroup: {
+              select: { id: true, code: true, name: true, color: true },
+            },
+            entitySubgroup: {
               select: { id: true, code: true, name: true, color: true },
             },
           },
@@ -253,6 +265,96 @@ export const deleteTemplate = async (req, res) => {
   }
 };
 
+// POST /api/policy-templates/:id/logo  (multipart, field name "file")
+// Uploads a payslip logo image and attaches it to the template. Replaces
+// any existing logo (old R2 object is deleted).
+export const uploadPayslipLogo = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+    if (!LOGO_ALLOWED_MIME_TYPES.includes(req.file.mimetype)) {
+      return res.status(400).json({
+        error: "Logo must be PNG, JPEG, or SVG",
+      });
+    }
+
+    const template = await prisma.policyTemplate.findUnique({ where: { id } });
+    if (!template) return res.status(404).json({ error: "Template not found" });
+
+    const key = await uploadCompanyFile(
+      req.file.buffer,
+      "policy-logos",
+      `${id}-${Date.now()}-${req.file.originalname}`,
+    );
+
+    if (template.payslipLogoUrl) {
+      await deleteFromR2(template.payslipLogoUrl).catch((err) =>
+        console.error("[PolicyTemplate] Failed to delete old logo:", err.message),
+      );
+    }
+
+    const updated = await prisma.policyTemplate.update({
+      where: { id },
+      data: { payslipLogoUrl: key },
+    });
+
+    clearPolicyCache();
+    console.log(`[PolicyTemplate] Logo uploaded for "${updated.name}" by ${req.user?.name}`);
+    res.json({ success: true, data: updated });
+  } catch (err) {
+    console.error("[PolicyTemplate] uploadPayslipLogo error:", err);
+    res.status(500).json({ error: "Failed to upload logo" });
+  }
+};
+
+// GET /api/policy-templates/:id/logo  — signed preview URL for the admin UI
+export const getPayslipLogoUrl = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const template = await prisma.policyTemplate.findUnique({ where: { id } });
+    if (!template) return res.status(404).json({ error: "Template not found" });
+    if (!template.payslipLogoUrl) {
+      return res.json({ success: true, data: { url: null } });
+    }
+    const url = await getR2DownloadUrl(template.payslipLogoUrl, 3600);
+    res.json({ success: true, data: { url } });
+  } catch (err) {
+    console.error("[PolicyTemplate] getPayslipLogoUrl error:", err);
+    res.status(500).json({ error: "Failed to get logo URL" });
+  }
+};
+
+// DELETE /api/policy-templates/:id/logo
+export const deletePayslipLogo = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const template = await prisma.policyTemplate.findUnique({ where: { id } });
+    if (!template) return res.status(404).json({ error: "Template not found" });
+
+    if (template.payslipLogoUrl) {
+      await deleteFromR2(template.payslipLogoUrl).catch((err) =>
+        console.error("[PolicyTemplate] Failed to delete logo from R2:", err.message),
+      );
+    }
+
+    const updated = await prisma.policyTemplate.update({
+      where: { id },
+      data: { payslipLogoUrl: null },
+    });
+
+    clearPolicyCache();
+    console.log(`[PolicyTemplate] Logo removed for "${updated.name}" by ${req.user?.name}`);
+    res.json({ success: true, data: updated });
+  } catch (err) {
+    console.error("[PolicyTemplate] deletePayslipLogo error:", err);
+    res.status(500).json({ error: "Failed to remove logo" });
+  }
+};
+
 // ─── ASSIGNMENTS ──────────────────────────────────────────────────────────────
 
 // GET /api/policy-templates/assignments
@@ -264,6 +366,9 @@ export const getAllAssignments = async (req, res) => {
         template: { select: { id: true, name: true } },
         entity: { select: { id: true, code: true, name: true } },
         entityGroup: {
+          select: { id: true, code: true, name: true, color: true },
+        },
+        entitySubgroup: {
           select: { id: true, code: true, name: true, color: true },
         },
       },
@@ -278,8 +383,8 @@ export const getAllAssignments = async (req, res) => {
 };
 
 // POST /api/policy-templates/assignments
-// Assign a template to one or more entities/groups in one call.
-// Body: { templateId, targets: [{ entityId? | entityGroupId?, priority?, label? }] }
+// Assign a template to one or more entities/groups/subgroups in one call.
+// Body: { templateId, targets: [{ entityId? | entityGroupId? | entitySubgroupId?, priority?, label? }] }
 export const createAssignments = async (req, res) => {
   try {
     const { templateId, targets } = req.body;
@@ -293,13 +398,18 @@ export const createAssignments = async (req, res) => {
 
     // Validate each target
     for (const t of targets) {
-      if (!t.entityId && !t.entityGroupId)
-        return res
-          .status(400)
-          .json({ error: "Each target must have entityId or entityGroupId" });
-      if (t.entityId && t.entityGroupId)
+      const targetCount = [t.entityId, t.entityGroupId, t.entitySubgroupId].filter(
+        Boolean,
+      ).length;
+      if (targetCount === 0)
         return res.status(400).json({
-          error: "Each target must have only one of entityId or entityGroupId",
+          error:
+            "Each target must have entityId, entityGroupId, or entitySubgroupId",
+        });
+      if (targetCount > 1)
+        return res.status(400).json({
+          error:
+            "Each target must have only one of entityId, entityGroupId, or entitySubgroupId",
         });
     }
 
@@ -315,12 +425,19 @@ export const createAssignments = async (req, res) => {
         prisma.policyAssignment.upsert({
           where: t.entityId
             ? { templateId_entityId: { templateId, entityId: t.entityId } }
-            : {
-                templateId_entityGroupId: {
-                  templateId,
-                  entityGroupId: t.entityGroupId,
+            : t.entityGroupId
+              ? {
+                  templateId_entityGroupId: {
+                    templateId,
+                    entityGroupId: t.entityGroupId,
+                  },
+                }
+              : {
+                  templateId_entitySubgroupId: {
+                    templateId,
+                    entitySubgroupId: t.entitySubgroupId,
+                  },
                 },
-              },
           update: {
             priority: t.priority ?? 10,
             label: t.label ?? null,
@@ -330,20 +447,22 @@ export const createAssignments = async (req, res) => {
             templateId,
             entityId: t.entityId || null,
             entityGroupId: t.entityGroupId || null,
+            entitySubgroupId: t.entitySubgroupId || null,
             priority: t.priority ?? 10,
             label: t.label || null,
           },
           include: {
             entity: { select: { id: true, code: true, name: true } },
             entityGroup: { select: { id: true, code: true, name: true } },
+            entitySubgroup: { select: { id: true, code: true, name: true } },
           },
         }),
       ),
     );
 
-    // Bust cache for all affected entities/groups
+    // Bust cache for all affected entities/groups/subgroups
     for (const t of targets) {
-      invalidatePolicyCache(t.entityId, t.entityGroupId);
+      invalidatePolicyCache(t.entityId, t.entityGroupId, t.entitySubgroupId);
     }
 
     console.log(
@@ -373,10 +492,15 @@ export const updateAssignment = async (req, res) => {
       include: {
         entity: { select: { id: true, code: true, name: true } },
         entityGroup: { select: { id: true, code: true, name: true } },
+        entitySubgroup: { select: { id: true, code: true, name: true } },
       },
     });
 
-    invalidatePolicyCache(updated.entityId, updated.entityGroupId);
+    invalidatePolicyCache(
+      updated.entityId,
+      updated.entityGroupId,
+      updated.entitySubgroupId,
+    );
 
     res.json({ success: true, data: updated });
   } catch (err) {
@@ -403,7 +527,11 @@ export const deleteAssignment = async (req, res) => {
       data: { isActive: false },
     });
 
-    invalidatePolicyCache(assignment.entityId, assignment.entityGroupId);
+    invalidatePolicyCache(
+      assignment.entityId,
+      assignment.entityGroupId,
+      assignment.entitySubgroupId,
+    );
 
     console.log(
       `[PolicyTemplate] Removed assignment ${id} by ${req.user?.name}`,

@@ -6,9 +6,10 @@ import ExcelJS from 'exceljs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import htmlPdf from 'html-pdf-node';
-import { uploadPayslip } from '../config/storage.js';
+import { uploadPayslip, getFileFromR2 } from '../config/storage.js';
 import { encryptPayslipPDF } from '../utils/pdfEncryption.js';
 import { sendPayslipNotificationEmail } from '../services/email.service.js';
+import { getEntityPolicy } from '../helpers/policyResolver.js';
 import prisma from '../config/database.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -396,22 +397,57 @@ async function excelRangeToHtml(sheet, range) {
 }
 
 /**
+ * Resolve the entity's payslip logo (from its policy) as a data URI, for
+ * injection into the generated HTML. The final PDF is built by converting
+ * cell VALUES to an HTML table (excelRangeToHtml) and rendering that with
+ * Puppeteer — it never rasterizes the source XLSX, so an image embedded via
+ * ExcelJS's addImage (workbook/sheet level) would be invisible here. The
+ * logo has to be a real <img> in the HTML instead.
+ *
+ * Falls back silently (returns null) on any failure — a missing/broken
+ * logo must never break payslip generation; the template's static header
+ * text is left in place as the fallback.
+ */
+async function getPayslipLogoDataUri(plottingCompanyId) {
+  try {
+    const policy = await getEntityPolicy(plottingCompanyId);
+    if (!policy.payslipLogoUrl) return null;
+
+    const buffer = await getFileFromR2(policy.payslipLogoUrl);
+    const mimeType = policy.payslipLogoUrl.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+    return `data:${mimeType};base64,${buffer.toString('base64')}`;
+  } catch (err) {
+    console.error('[Payslip] Failed to load custom logo, using template default:', err.message);
+    return null;
+  }
+}
+
+/**
  * Fill template with employee data and convert to PDF
  */
 export const fillTemplateAndConvertToPDF = async (employeeData, payrollData, period, plottingCompany) => {
   // Load template
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(TEMPLATE_PATH);
-  
+
   const sheet = workbook.getWorksheet('Payslip');
   if (!sheet) {
     throw new Error('Template sheet "Payslip" not found');
   }
 
-  
+  const logoDataUri = await getPayslipLogoDataUri(plottingCompany?.id);
+
   // ── Populate cells ─────────────────────────────────────────────────────────
   sheet.mergeCells('B2:D2');
   sheet.mergeCells('B3:D3');
+
+  // A custom logo replaces the template's static "Rhaya Flicks" title (B1)
+  // entirely, rather than rendering underneath/behind it. The address (B2)
+  // and email (B3) lines are left as-is — they're a separate, pre-existing
+  // limitation (hardcoded per-entity contact info), not part of this fix.
+  if (logoDataUri) {
+    sheet.getCell('B1').value = '';
+  }
 
   sheet.getCell('B5').value = employeeData.plottingCompanyName || 'PT Rhayakan Film Indonesia';
   sheet.mergeCells('B5:C5');
@@ -541,21 +577,28 @@ export const fillTemplateAndConvertToPDF = async (employeeData, payrollData, per
 
   // ── Convert to HTML ────────────────────────────────────────────────────────
   const htmlTable = await excelRangeToHtml(sheet, 'A1:F49');
-  
+
+  // Logo sits in the same top-left header region the static "Rhaya Flicks"
+  // text otherwise occupies (B2/B3, cleared above when a custom logo is set).
+  const logoHtml = logoDataUri
+    ? `<img src="${logoDataUri}" alt="Company logo" style="position: absolute; top: 0; left: 0; max-height: 50px; max-width: 160px; object-fit: contain;" />`
+    : '';
+
   const htmlContent = `
     <!DOCTYPE html>
     <html>
     <head>
       <meta charset="UTF-8">
       <style>
-        @page { 
-          size: A4; 
+        @page {
+          size: A4;
           margin: 15mm;
         }
-        body { 
-          margin: 0; 
-          padding: 0; 
+        body {
+          margin: 0;
+          padding: 0;
           width: 210mm;  /* A4 width */
+          position: relative;
         }
         table {
           width: 100%;
@@ -563,7 +606,7 @@ export const fillTemplateAndConvertToPDF = async (employeeData, payrollData, per
         }
       </style>
     </head>
-    <body>${htmlTable}</body>
+    <body>${logoHtml}${htmlTable}</body>
     </html>
   `;
   

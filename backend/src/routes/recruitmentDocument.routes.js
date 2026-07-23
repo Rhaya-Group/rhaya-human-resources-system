@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { issueDocument, listDocuments, deleteDocument } from "../controllers/recruitmentDocument.controller.js";
+import { issueDocument, listDocuments, deleteDocument, viewDocument } from "../controllers/recruitmentDocument.controller.js";
 import { uploadSingle } from "../middleware/uploadMiddleware.js";
 
 const router = Router();
@@ -7,6 +7,7 @@ const router = Router();
 // HR: manage documents
 router.get("/", listDocuments);
 router.post("/", uploadSingle, issueDocument);
+router.get("/:id/view", viewDocument);
 router.delete("/:id", deleteDocument);
 
 export default router;

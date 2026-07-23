@@ -3,10 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, Search } from "lucide-react";
 import apiClient from "../../api/client";
 import { ApplicationsReadOnly, ParsedCvReadOnly, ProfileAnswersReadOnly } from "./CandidateProfileReadOnly.jsx";
+import DocumentPreviewModal from "../../components/DocumentPreviewModal.jsx";
 
 export default function CandidatePool() {
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState(null);
+  const [cvPreview, setCvPreview] = useState(null);
+  const [cvLoading, setCvLoading] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["candidatePool", search],
@@ -19,6 +22,24 @@ export default function CandidatePool() {
     enabled: Boolean(selectedId),
     queryFn: async () => (await apiClient.get(`/hr/applicants/${selectedId}`)).data,
   });
+
+  async function viewCv() {
+    setCvLoading(true);
+    try {
+      const res = await apiClient.get(`/hr/applicants/${selectedId}/cv`, { responseType: "blob" });
+      setCvPreview({
+        href: URL.createObjectURL(res.data),
+        mimeType: res.headers["content-type"] || "application/pdf",
+      });
+    } finally {
+      setCvLoading(false);
+    }
+  }
+
+  function closeCvPreview() {
+    if (cvPreview?.href) URL.revokeObjectURL(cvPreview.href);
+    setCvPreview(null);
+  }
 
   return (
     <div className="p-6">
@@ -79,9 +100,9 @@ export default function CandidatePool() {
                     <p className="text-xs text-gray-400 mt-1">Registered {new Date(detail.createdAt).toLocaleDateString()}</p>
                   </div>
                   {detail.cvFileUrl && (
-                    <a href={detail.cvFileUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline">
-                      View CV <ExternalLink className="w-4 h-4" />
-                    </a>
+                    <button type="button" onClick={viewCv} className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline">
+                      {cvLoading ? "Loading CV..." : "View CV"} <ExternalLink className="w-4 h-4" />
+                    </button>
                   )}
                 </div>
               </div>
@@ -93,6 +114,14 @@ export default function CandidatePool() {
           )}
         </section>
       </div>
+      {cvPreview && (
+        <DocumentPreviewModal
+          fileName="CV"
+          mimeType={cvPreview.mimeType}
+          previewUrl={cvPreview.href}
+          onClose={closeCvPreview}
+        />
+      )}
     </div>
   );
 }

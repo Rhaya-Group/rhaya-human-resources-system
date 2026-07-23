@@ -1,7 +1,19 @@
 import { PrismaClient } from "@prisma/client";
-import { uploadToR2, deleteFromR2 } from "../services/r2.service.js";
+import { uploadToR2, deleteFromR2, publicFileUrl, getFileFromR2 } from "../services/r2.service.js";
 
 const prisma = new PrismaClient();
+
+function withPublicFile(doc) {
+  return doc ? { ...doc, fileUrl: publicFileUrl(doc.fileUrl) } : doc;
+}
+
+async function streamDocument(doc, res) {
+  if (!doc?.fileUrl) return res.status(404).json({ error: "File not found" });
+  const file = await getFileFromR2(doc.fileUrl);
+  res.setHeader("Content-Type", file.ContentType || "application/octet-stream");
+  res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(doc.title || "document")}"`);
+  file.Body.pipe(res);
+}
 
 // ── HR: issue outbound document ───────────────────────────────────────────────
 
@@ -47,7 +59,7 @@ export const issueDocument = async (req, res) => {
       },
     });
 
-    res.status(201).json(doc);
+    res.status(201).json(withPublicFile(doc));
   } catch (error) {
     res.status(error.statusCode || error.status || 500).json({ error: error.message || "Failed to issue document" });
   }
@@ -65,7 +77,7 @@ export const listDocuments = async (req, res) => {
     where,
     orderBy: { createdAt: "desc" },
   });
-  res.json(docs);
+  res.json(docs.map(withPublicFile));
 };
 
 export const deleteDocument = async (req, res) => {
@@ -77,32 +89,46 @@ export const deleteDocument = async (req, res) => {
   res.status(204).end();
 };
 
+export const viewDocument = async (req, res) => {
+  try {
+    const doc = await prisma.recruitmentDocument.findUnique({ where: { id: req.params.id } });
+    if (!doc) return res.status(404).json({ error: "Document not found" });
+    return streamDocument(doc, res);
+  } catch (error) {
+    res.status(error.statusCode || error.status || 500).json({ error: error.message || "Failed to open document" });
+  }
+};
+
 // ── Candidate: submit inbound document ───────────────────────────────────────
 
 export const submitDocument = async (req, res) => {
-  const { applicationId, stage, kind, title, linkUrl } = req.body;
+  try {
+    const { applicationId, kind, title, linkUrl } = req.body;
 
-  // Verify application belongs to this candidate
-  const application = await prisma.jobApplication.findFirst({
-    where: { id: applicationId, applicantId: req.applicant.id },
-  });
-  if (!application) return res.status(403).json({ error: "Application not found" });
+    // Verify application belongs to this candidate
+    const application = await prisma.jobApplication.findFirst({
+      where: { id: applicationId, applicantId: req.applicant.id },
+    });
+    if (!application) return res.status(403).json({ error: "Application not found" });
 
-  let fileUrl = null;
-  if (kind === "file") {
-    if (!req.file) return res.status(400).json({ error: "File required for kind=file" });
-    fileUrl = await uploadToR2(req.file, "recruitment/submissions");
-  } else if (kind === "link") {
-    if (!linkUrl) return res.status(400).json({ error: "linkUrl required for kind=link" });
-  } else {
-    return res.status(400).json({ error: "kind must be file or link" });
+    let fileUrl = null;
+    if (kind === "file") {
+      if (!req.file) return res.status(400).json({ error: "File required for kind=file" });
+      fileUrl = await uploadToR2(req.file, "recruitment/submissions");
+    } else if (kind === "link") {
+      if (!linkUrl) return res.status(400).json({ error: "linkUrl required for kind=link" });
+    } else {
+      return res.status(400).json({ error: "kind must be file or link" });
+    }
+
+    const doc = await prisma.recruitmentDocument.create({
+      data: { applicationId, stage: application.stage, direction: "inbound", kind, title, fileUrl, linkUrl },
+    });
+
+    res.status(201).json(withPublicFile(doc));
+  } catch (error) {
+    res.status(error.statusCode || error.status || 500).json({ error: error.message || "Failed to submit document" });
   }
-
-  const doc = await prisma.recruitmentDocument.create({
-    data: { applicationId, stage, direction: "inbound", kind, title, fileUrl, linkUrl },
-  });
-
-  res.status(201).json(doc);
 };
 
 // ── Candidate: view documents issued to them ─────────────────────────────────
@@ -120,5 +146,20 @@ export const listMyDocuments = async (req, res) => {
     where: { applicationId },
     orderBy: { createdAt: "desc" },
   });
-  res.json(docs);
+  res.json(docs.map(withPublicFile));
+};
+
+export const viewMyDocument = async (req, res) => {
+  try {
+    const doc = await prisma.recruitmentDocument.findUnique({
+      where: { id: req.params.id },
+      include: { application: { select: { applicantId: true } } },
+    });
+    if (!doc || doc.application?.applicantId !== req.applicant.id) {
+      return res.status(404).json({ error: "Document not found" });
+    }
+    return streamDocument(doc, res);
+  } catch (error) {
+    res.status(error.statusCode || error.status || 500).json({ error: error.message || "Failed to open document" });
+  }
 };
