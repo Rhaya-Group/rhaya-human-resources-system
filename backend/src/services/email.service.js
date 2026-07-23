@@ -1787,27 +1787,9 @@ export async function sendApplicantPasswordResetEmail(applicant, resetToken) {
     </p>
   `;
 
-  const html = renderEmailDocument({
-    title: "Password Reset Request - Rhaya Group Careers",
-    headerTitle: "Password Reset Request",
-    headerSubtitle: "Reset your candidate account password",
-    colors: {
-      headerBg: BRAND_COLORS.primary,
-      headerBg2: BRAND_COLORS.secondary,
-      primary: BRAND_COLORS.primary,
-      secondary: BRAND_COLORS.secondary,
-      accent: BRAND_COLORS.accent,
-      cardBg: BRAND_COLORS.cardBg,
-      cardBorder: BRAND_COLORS.cardBorder,
-      textPrimary: BRAND_COLORS.textPrimary,
-      textSecondary: BRAND_COLORS.textSecondary,
-    },
+  const html = recruitmentEmailDocument({
+    title: "Password Reset Request",
     bodyHtml,
-    footerHtml: renderFooter({
-      signature: "",
-      companyName: "Rhaya Group",
-      note: "This is an automated email from Rhaya Group Careers. Please do not reply to this email.",
-    }),
   });
 
   const text = `

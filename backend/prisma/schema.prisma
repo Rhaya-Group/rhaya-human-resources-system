@@ -916,8 +916,25 @@ model Applicant {
   updatedAt      DateTime         @updatedAt
   applications   JobApplication[]
   profileAnswers ProfileAnswer[]
+  passwordResetTokens ApplicantPasswordResetToken[]
 
   @@map("applicants")
+}
+
+model ApplicantPasswordResetToken {
+  id               String    @id @default(cuid())
+  applicantId      String
+  token            String    @unique
+  tempPasswordHash String
+  expiresAt        DateTime
+  usedAt           DateTime?
+  createdAt        DateTime  @default(now())
+  applicant        Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@index([applicantId])
+  @@index([token])
+  @@index([expiresAt])
+  @@map("applicant_password_reset_tokens")
 }
 
 model JobPosting {
