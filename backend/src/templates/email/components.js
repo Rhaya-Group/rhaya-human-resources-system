@@ -23,18 +23,18 @@ export function renderInfoCard({ title, titleColor, rows, accentColor }) {
     .map(
       (row) => `
         <tr>
-          <td class="detail-label">${escapeHtml(row.label)}</td>
+          <td class="detail-label" style="padding:8px 0;font-size:14px;vertical-align:top;color:#666666;width:40%;">${escapeHtml(row.label)}</td>
           <td class="detail-value${row.mono ? " mono" : ""}"${
-        row.color ? ` style="color: ${row.color};"` : ""
+        ` style="padding:8px 0;font-size:14px;vertical-align:top;color:${row.color || "#000000"};font-weight:600;text-align:right;${row.mono ? "font-family:'Courier New',monospace;" : ""}"`
       }>${row.raw ? row.value : escapeHtml(row.value)}</td>
         </tr>`
     )
     .join("");
 
   return `
-    <div class="details-card">
-      ${title ? `<h3${titleColor ? ` style="color: ${titleColor};"` : ""}>${escapeHtml(title)}</h3>` : ""}
-      <table class="detail-table" role="presentation" cellpadding="0" cellspacing="0">
+    <div class="details-card" style="background-color:#F5F5F5;border:1px solid #E0E0E0;border-radius:10px;padding:20px 25px;margin:20px 0;">
+      ${title ? `<h3 style="margin:0 0 14px;font-size:15px;font-weight:600;color:${titleColor || "#152A55"};text-align:center;">${escapeHtml(title)}</h3>` : ""}
+      <table class="detail-table" role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;">
         ${rowsHtml}
       </table>
     </div>`;
@@ -75,9 +75,9 @@ export function renderActionButtons(buttonsHtml) {
 
 export function renderFooter({ signature = "HR Team", companyName, note }) {
   return `
-    <div class="footer">
-      <p class="footer-signature">${signature}</p>
-      <p class="footer-text">Human Resources Department${companyName ? `<br/>${companyName}` : ""}</p>
-      ${note ? `<p class="footer-note">${note}</p>` : ""}
+    <div class="footer" style="padding:24px 40px;text-align:center;border-top:1px solid #E0E0E0;">
+      <p class="footer-signature" style="font-size:14px;font-weight:600;color:#152A55;margin:0 0 4px;">${signature}</p>
+      <p class="footer-text" style="font-size:13px;color:#666666;margin:0 0 12px;">Human Resources Department${companyName ? `<br/>${companyName}` : ""}</p>
+      ${note ? `<p class="footer-note" style="font-size:12px;color:#666666;opacity:0.8;margin:0;">${note}</p>` : ""}
     </div>`;
 }

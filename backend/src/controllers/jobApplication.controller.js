@@ -7,6 +7,7 @@ import prisma from "../config/database.js";
 import { canAccessEntity } from "./jobPosting.controller.js";
 import { ruleMatches } from "../utils/recruitmentKnockout.js";
 import { publicFileUrl, getFileFromR2 } from "../services/r2.service.js";
+import { sendApplicationConfirmationEmail, sendStageChangeEmail } from "../services/email.service.js";
 
 const STAGES = [
   "applied",
@@ -32,7 +33,7 @@ export const listPublicQuestions = async (req, res) => {
 
     const posting = await prisma.jobPosting.findUnique({
       where: { id: jobPostingId },
-      select: { id: true, status: true },
+      select: { id: true, status: true, title: true },
     });
     if (!posting || posting.status !== "OPEN") {
       return res.status(404).json({ error: "Job not found or not open" });
@@ -142,6 +143,9 @@ export const apply = async (req, res) => {
 
       return created;
     });
+    sendApplicationConfirmationEmail({ applicant: req.applicant, jobTitle: posting.title }).catch((error) =>
+      console.error("Recruitment application email error:", error)
+    );
     return res.status(201).json(application);
   } catch (error) {
     console.error("Apply error:", error);
@@ -333,6 +337,11 @@ export const updateStage = async (req, res) => {
         },
       }),
     ]);
+    sendStageChangeEmail({
+      applicant: application.applicant,
+      jobTitle: application.jobPosting?.title,
+      stage,
+    }).catch((error) => console.error("Recruitment stage email error:", error));
     return res.json(updated);
   } catch (error) {
     console.error("Update stage error:", error);

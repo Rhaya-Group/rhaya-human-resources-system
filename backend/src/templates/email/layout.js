@@ -71,13 +71,13 @@ export function renderEmailDocument({
 ${renderBaseStyles(colors)}
 </head>
 <body>
-  <div class="email-wrapper">
-    <div class="container">
-      <div class="header">
-        <h1>${headerTitle}</h1>
-        ${headerSubtitle ? `<p>${headerSubtitle}</p>` : ""}
+  <div class="email-wrapper" style="width:100%;background-color:#F9F9F9;padding:40px 20px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+    <div class="container" style="max-width:600px;margin:0 auto;background-color:${colors.accent};border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+      <div class="header" style="background-color:${colors.headerBg};background:${colors.headerBg2 ? `linear-gradient(135deg, ${colors.headerBg} 0%, ${colors.headerBg2} 100%)` : colors.headerBg};padding:32px 40px;text-align:center;">
+        <h1 style="margin:0;color:#FFFFFF;font-size:28px;font-weight:600;letter-spacing:-0.5px;">${headerTitle}</h1>
+        ${headerSubtitle ? `<p style="margin:8px 0 0;color:#FFFFFF;opacity:0.9;font-size:14px;">${headerSubtitle}</p>` : ""}
       </div>
-      <div class="content">
+      <div class="content" style="padding:32px 40px;color:${colors.textPrimary};">
         ${bodyHtml}
       </div>
       ${footerHtml}

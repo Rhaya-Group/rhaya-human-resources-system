@@ -95,8 +95,6 @@ function createTransporter() {
   });
 }
 
-const transporter = createTransporter();
-
 /**
  * Create a transporter for a named SMTP profile.
  * Profile key maps to env vars: SMTP2GO_{KEY}_USER / PASS / HOST / PORT / FROM_EMAIL / FROM_NAME
@@ -117,7 +115,7 @@ function createTransporterForProfile(profile) {
   // null / undefined / "default" → use shared default transporter
   if (!profile || profile === "default") {
     return {
-      transporter,
+      transporter: createTransporter(),
       fromEmail:
         process.env.SMTP_FROM_EMAIL ||
         process.env.SMTP_FROM ||
@@ -135,7 +133,7 @@ function createTransporterForProfile(profile) {
       `⚠️  [EMAIL] smtpProfile "${profile}" missing env vars SMTP2GO_${key}_USER / SMTP2GO_${key}_PASS — falling back to default transporter`,
     );
     return {
-      transporter,
+      transporter: createTransporter(),
       fromEmail:
         process.env.SMTP_FROM_EMAIL ||
         process.env.SMTP_FROM ||
@@ -235,6 +233,131 @@ export async function sendEmail({ to, subject, html, text, cc, smtpProfile }) {
       error: error.message,
     };
   }
+}
+
+function recruitmentJobText(jobTitle) {
+  return jobTitle ? ` for ${jobTitle}` : "";
+}
+
+function recruitmentEmailDocument({ title, bodyHtml }) {
+  return renderEmailDocument({
+    title,
+    headerTitle: title,
+    colors: {
+      headerBg: BRAND_COLORS.primary,
+      headerBg2: null,
+      primary: BRAND_COLORS.primary,
+      secondary: BRAND_COLORS.secondary,
+      accent: BRAND_COLORS.accent,
+      cardBg: BRAND_COLORS.cardBg,
+      cardBorder: BRAND_COLORS.cardBorder,
+      textPrimary: BRAND_COLORS.textPrimary,
+      textSecondary: BRAND_COLORS.textSecondary,
+    },
+    bodyHtml,
+    footerHtml: renderFooter({
+      companyName: "Rhaya Group",
+      note: "This is an automated notification from the HR system.",
+    }),
+  });
+}
+
+export function sendApplicationConfirmationEmail({ applicant, jobTitle }) {
+  if (!applicant?.email) return Promise.resolve();
+  const subject = `Application received${recruitmentJobText(jobTitle)}`;
+  const text = `Hi ${applicant.name || "there"},\n\nWe received your application${recruitmentJobText(jobTitle)}. You can track updates from your candidate dashboard.`;
+  return sendEmail({
+    to: applicant.email,
+    subject,
+    text,
+    html: recruitmentEmailDocument({
+      title: "Application Received",
+      bodyHtml: `
+        <p style="text-align: center;">Hi <strong>${escapeHtml(applicant.name || "there")}</strong>,</p>
+        <p style="text-align: center;">We received your application. You can track updates from your candidate dashboard.</p>
+        ${renderInfoCard({
+          title: "Application Details",
+          rows: [{ label: "Position:", value: jobTitle || "N/A" }],
+        })}
+      `,
+    }),
+  });
+}
+
+export function sendStageChangeEmail({ applicant, jobTitle, stage }) {
+  if (!applicant?.email) return Promise.resolve();
+  const subject = `Application stage updated${recruitmentJobText(jobTitle)}`;
+  const text = `Hi ${applicant.name || "there"},\n\nYour application${recruitmentJobText(jobTitle)} is now at stage: ${stage}.`;
+  return sendEmail({
+    to: applicant.email,
+    subject,
+    text,
+    html: recruitmentEmailDocument({
+      title: "Application Stage Updated",
+      bodyHtml: `
+        <p style="text-align: center;">Hi <strong>${escapeHtml(applicant.name || "there")}</strong>,</p>
+        <p style="text-align: center;">Your application has moved to a new stage.</p>
+        ${renderInfoCard({
+          title: "Application Details",
+          rows: [
+            { label: "Position:", value: jobTitle || "N/A" },
+            { label: "Current Stage:", value: stage },
+          ],
+        })}
+      `,
+    }),
+  });
+}
+
+export function sendDocumentIssuedEmail({ applicant, jobTitle, title }) {
+  if (!applicant?.email) return Promise.resolve();
+  const subject = `New recruitment document${recruitmentJobText(jobTitle)}`;
+  const text = `Hi ${applicant.name || "there"},\n\nA document is waiting in your candidate portal: ${title}.`;
+  return sendEmail({
+    to: applicant.email,
+    subject,
+    text,
+    html: recruitmentEmailDocument({
+      title: "New Recruitment Document",
+      bodyHtml: `
+        <p style="text-align: center;">Hi <strong>${escapeHtml(applicant.name || "there")}</strong>,</p>
+        <p style="text-align: center;">A document is waiting for you in your candidate portal.</p>
+        ${renderInfoCard({
+          title: "Document Details",
+          rows: [
+            { label: "Position:", value: jobTitle || "N/A" },
+            { label: "Document:", value: title },
+          ],
+        })}
+      `,
+    }),
+  });
+}
+
+export function sendInboundDocumentSubmittedEmail({ recipients, applicant, jobTitle, title }) {
+  const to = recipients?.map((user) => user.email).filter(Boolean);
+  if (!to?.length) return Promise.resolve();
+  const subject = `Candidate submitted a document${recruitmentJobText(jobTitle)}`;
+  const text = `${applicant?.name || "A candidate"} submitted a document${recruitmentJobText(jobTitle)}: ${title}.`;
+  return sendEmail({
+    to,
+    subject,
+    text,
+    html: recruitmentEmailDocument({
+      title: "Candidate Document Submitted",
+      bodyHtml: `
+        <p style="text-align: center;"><strong>${escapeHtml(applicant?.name || "A candidate")}</strong> submitted a document.</p>
+        ${renderInfoCard({
+          title: "Document Details",
+          rows: [
+            { label: "Candidate:", value: applicant?.name || "N/A" },
+            { label: "Position:", value: jobTitle || "N/A" },
+            { label: "Document:", value: title },
+          ],
+        })}
+      `,
+    }),
+  });
 }
 
 /**
@@ -1614,6 +1737,107 @@ PT Rhayakan Film Indonesia
   });
 }
 
+export async function sendApplicantPasswordResetEmail(applicant, resetToken) {
+  const recruitmentUrl = (
+    process.env.RECRUITMENT_URL || "http://localhost:5176"
+  ).replace(/\/$/, "");
+  const resetUrl = `${recruitmentUrl}/reset-password?token=${resetToken}`;
+  const requestedAt = new Date().toLocaleString("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+  const expirationTime = new Date();
+  expirationTime.setHours(expirationTime.getHours() + 1);
+  const formattedExpiration = expirationTime.toLocaleString("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+
+  const bodyHtml = `
+    <p>Dear <strong>${escapeHtml(applicant.name)}</strong>,</p>
+    <p>We received a request to reset your password for your Rhaya Group Careers account. Click the button below to create a new password:</p>
+    ${renderActionButtons([
+      renderButton({
+        href: resetUrl,
+        text: "Reset Password",
+        bg: BRAND_COLORS.primary,
+      }),
+    ])}
+    ${renderCalloutBox({
+      label: "Request Details:",
+      bodyHtml: `Email: ${escapeHtml(applicant.email)}<br/>Time: ${requestedAt}<br/>Expires: ${formattedExpiration}`,
+      bg: "#E7F3FF",
+      border: BRAND_COLORS.primary,
+      textColor: BRAND_COLORS.textPrimary,
+    })}
+    <p>This link will expire in <strong>1 hour</strong> for security reasons. If you need a new link, you can request another password reset.</p>
+    ${renderCalloutBox({
+      label: "Security Notice",
+      bodyHtml: `<strong>If you didn't request this password reset, please ignore this email.</strong> Your password will remain unchanged and secure.`,
+      bg: "#FFF3CD",
+      border: "#FFC107",
+      textColor: BRAND_COLORS.textPrimary,
+      labelColor: "#856404",
+    })}
+    <p style="margin-top: 30px; font-size: 14px; color: ${BRAND_COLORS.textSecondary};">
+      If the button doesn't work, copy and paste this link into your browser:
+    </p>
+    <p style="word-break: break-all; color: ${BRAND_COLORS.textSecondary}; font-size: 12px; margin-top: 15px;">
+      ${resetUrl}
+    </p>
+  `;
+
+  const html = renderEmailDocument({
+    title: "Password Reset Request - Rhaya Group Careers",
+    headerTitle: "Password Reset Request",
+    headerSubtitle: "Reset your candidate account password",
+    colors: {
+      headerBg: BRAND_COLORS.primary,
+      headerBg2: BRAND_COLORS.secondary,
+      primary: BRAND_COLORS.primary,
+      secondary: BRAND_COLORS.secondary,
+      accent: BRAND_COLORS.accent,
+      cardBg: BRAND_COLORS.cardBg,
+      cardBorder: BRAND_COLORS.cardBorder,
+      textPrimary: BRAND_COLORS.textPrimary,
+      textSecondary: BRAND_COLORS.textSecondary,
+    },
+    bodyHtml,
+    footerHtml: renderFooter({
+      signature: "",
+      companyName: "Rhaya Group",
+      note: "This is an automated email from Rhaya Group Careers. Please do not reply to this email.",
+    }),
+  });
+
+  const text = `
+Password Reset Request
+
+Dear ${applicant.name},
+
+We received a request to reset your Rhaya Group Careers password.
+
+To reset your password, click the link below or copy it into your browser:
+${resetUrl}
+
+Request Details:
+Email: ${applicant.email}
+Time: ${requestedAt}
+Expires: ${formattedExpiration}
+
+This link will expire in 1 hour for security reasons.
+
+If you didn't request this password reset, please ignore this email.
+  `;
+
+  return sendEmail({
+    to: applicant.email,
+    subject: "Password Reset Request - Rhaya Group Careers",
+    html,
+    text,
+  });
+}
+
 /**
  * Send password changed confirmation email
  * Add this to your email_service.js file
@@ -2428,6 +2652,7 @@ export default {
   sendWelcomeEmail,
   sendOvertimeReminderEmail,
   sendPasswordResetEmail,
+  sendApplicantPasswordResetEmail,
   sendPasswordChangedEmail,
   sendPayslipNotificationEmail,
   sendBatchPayslipNotification,
@@ -2436,4 +2661,8 @@ export default {
   sendOvertimePlanApprovedEmail,
   sendOvertimeActualizationNeededEmail,
   sendContractExpiryReminderEmail,
+  sendApplicationConfirmationEmail,
+  sendStageChangeEmail,
+  sendDocumentIssuedEmail,
+  sendInboundDocumentSubmittedEmail,
 };

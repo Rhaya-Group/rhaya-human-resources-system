@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { uploadToR2, deleteFromR2, publicFileUrl, getFileFromR2 } from "../services/r2.service.js";
+import { sendDocumentIssuedEmail, sendInboundDocumentSubmittedEmail } from "../services/email.service.js";
 
 const prisma = new PrismaClient();
 
@@ -59,6 +60,22 @@ export const issueDocument = async (req, res) => {
       },
     });
 
+    if (applicationId) {
+      prisma.jobApplication.findUnique({
+        where: { id: applicationId },
+        include: {
+          applicant: { select: { email: true, name: true } },
+          jobPosting: { select: { title: true } },
+        },
+      }).then((application) =>
+        sendDocumentIssuedEmail({
+          applicant: application?.applicant,
+          jobTitle: application?.jobPosting?.title,
+          title,
+        })
+      ).catch((error) => console.error("Recruitment document issued email error:", error));
+    }
+
     res.status(201).json(withPublicFile(doc));
   } catch (error) {
     res.status(error.statusCode || error.status || 500).json({ error: error.message || "Failed to issue document" });
@@ -108,6 +125,7 @@ export const submitDocument = async (req, res) => {
     // Verify application belongs to this candidate
     const application = await prisma.jobApplication.findFirst({
       where: { id: applicationId, applicantId: req.applicant.id },
+      include: { jobPosting: { select: { title: true } } },
     });
     if (!application) return res.status(403).json({ error: "Application not found" });
 
@@ -124,6 +142,18 @@ export const submitDocument = async (req, res) => {
     const doc = await prisma.recruitmentDocument.create({
       data: { applicationId, stage: application.stage, direction: "inbound", kind, title, fileUrl, linkUrl },
     });
+
+    prisma.positionOverseer.findMany({
+      where: { jobPostingId: application.jobPostingId, access: "manage" },
+      include: { hrisUser: { select: { email: true, name: true } } },
+    }).then((overseers) =>
+      sendInboundDocumentSubmittedEmail({
+        recipients: overseers.map((row) => row.hrisUser),
+        applicant: req.applicant,
+        jobTitle: application.jobPosting?.title,
+        title,
+      })
+    ).catch((error) => console.error("Recruitment inbound document email error:", error));
 
     res.status(201).json(withPublicFile(doc));
   } catch (error) {
