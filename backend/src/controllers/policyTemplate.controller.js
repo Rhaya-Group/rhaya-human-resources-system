@@ -570,23 +570,22 @@ export const getMyPolicyUrl = async (req, res) => {
     // ✅ Bug fix 2: Query directly here instead of going through resolver
     // The resolver caches for 5 min — if admin just set URL and user refreshes
     // sidebar, the cache hides it. This endpoint bypasses cache intentionally.
+    const templateSelect = {
+      name: true,
+      internalPolicyUrl: true,
+      isActive: true,
+      overtimeMode: true,
+    };
+
     const entity = await prisma.plottingCompany.findUnique({
       where: { id: entityId },
       select: {
         groupId: true,
+        subgroupId: true,
         policyAssignments: {
           // ← relation name from schema
           where: { isActive: true },
-          include: {
-            template: {
-              select: {
-                name: true,
-                internalPolicyUrl: true,
-                isActive: true,
-                overtimeMode: true,
-              },
-            },
-          },
+          include: { template: { select: templateSelect } },
           orderBy: { priority: "desc" },
         },
         group: {
@@ -594,16 +593,16 @@ export const getMyPolicyUrl = async (req, res) => {
             policyAssignments: {
               // ← relation name from schema
               where: { isActive: true },
-              include: {
-                template: {
-                  select: {
-                    name: true,
-                    internalPolicyUrl: true,
-                    isActive: true,
-                    overtimeMode: true,
-                  },
-                },
-              },
+              include: { template: { select: templateSelect } },
+              orderBy: { priority: "desc" },
+            },
+          },
+        },
+        subgroup: {
+          select: {
+            policyAssignments: {
+              where: { isActive: true },
+              include: { template: { select: templateSelect } },
               orderBy: { priority: "desc" },
             },
           },
@@ -618,6 +617,7 @@ export const getMyPolicyUrl = async (req, res) => {
     // Merge and sort by priority — highest wins
     const allAssignments = [
       ...(entity.policyAssignments || []),
+      ...(entity.subgroup?.policyAssignments || []),
       ...(entity.group?.policyAssignments || []),
     ]
       .filter((a) => a.template?.isActive) // ✅ Bug fix 3: skip if template soft-deleted
