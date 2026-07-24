@@ -5,8 +5,9 @@
 
 import prisma from "../config/database.js";
 
-const EMPLOYMENT_TYPES = ["FULL_TIME", "CONTRACT", "INTERN"];
+const EMPLOYMENT_TYPES = ["FULL_TIME", "CONTRACT", "INTERN", "PART_TIME", "FREELANCE"];
 const STATUSES = ["DRAFT", "OPEN", "CLOSED"];
+const WORK_SYSTEMS = ["WFO", "WFH", "HYBRID"];
 
 /**
  * Check whether an HR user may act on a given entity.
@@ -60,8 +61,23 @@ const POSTING_INCLUDE = {
   plottingCompany: { select: { id: true, name: true, code: true } },
   createdBy: { select: { id: true, name: true, email: true } },
   recruiter: { select: { id: true, name: true, email: true } },
+  category: { select: { id: true, name: true } },
   _count: { select: { applications: true } },
 };
+
+const PUBLIC_POSTING_SELECT = {
+  id: true, title: true, description: true, department: true, location: true,
+  employmentType: true, openings: true, closeDate: true, createdAt: true,
+  categoryId: true, requirements: true, workSystem: true,
+  salaryMin: true, salaryMax: true, salaryDisplay: true,
+  category: { select: { id: true, name: true } },
+  plottingCompany: { select: { id: true, name: true } },
+};
+
+function publicPosting(posting) {
+  if (posting?.salaryDisplay) return posting;
+  return { ...posting, salaryMin: null, salaryMax: null };
+}
 
 // GET /api/recruitment/jobs  — HR list (scoped). Optional ?status= & ?entityId=
 export const listJobs = async (req, res) => {
@@ -77,7 +93,7 @@ export const listJobs = async (req, res) => {
       include: POSTING_INCLUDE,
       orderBy: { createdAt: "desc" },
     });
-    return res.json(postings);
+    return res.json(postings.map(publicPosting));
   } catch (error) {
     console.error("List job postings error:", error);
     return res.status(500).json({ error: "Failed to fetch job postings" });
@@ -110,6 +126,7 @@ export const createJob = async (req, res) => {
       title, description, department, location,
       employmentType = "FULL_TIME", status = "DRAFT",
       openings = 1, closeDate, plottingCompanyId, recruiterId,
+      categoryId, requirements, workSystem, salaryMin, salaryMax, salaryDisplay = false,
     } = req.body;
 
     if (!title || !description || !plottingCompanyId) {
@@ -120,6 +137,9 @@ export const createJob = async (req, res) => {
     }
     if (!STATUSES.includes(status)) {
       return res.status(400).json({ error: `status must be one of ${STATUSES.join(", ")}` });
+    }
+    if (workSystem && !WORK_SYSTEMS.includes(workSystem)) {
+      return res.status(400).json({ error: `workSystem must be one of ${WORK_SYSTEMS.join(", ")}` });
     }
     if (!(await canAccessEntity(req.user, plottingCompanyId))) {
       return res.status(403).json({ error: "Access denied for this entity" });
@@ -135,6 +155,12 @@ export const createJob = async (req, res) => {
         closeDate: closeDate ? new Date(closeDate) : null,
         plottingCompanyId,
         recruiterId: recruiterId || null,
+        categoryId: categoryId || null,
+        requirements: requirements || null,
+        workSystem: workSystem || null,
+        salaryMin: salaryMin === "" || salaryMin === undefined || salaryMin === null ? null : Number(salaryMin),
+        salaryMax: salaryMax === "" || salaryMax === undefined || salaryMax === null ? null : Number(salaryMax),
+        salaryDisplay: Boolean(salaryDisplay),
         createdById: req.user.id,
       },
       include: POSTING_INCLUDE,
@@ -161,6 +187,7 @@ export const updateJob = async (req, res) => {
     const {
       title, description, department, location,
       employmentType, status, openings, closeDate, plottingCompanyId, recruiterId,
+      categoryId, requirements, workSystem, salaryMin, salaryMax, salaryDisplay,
     } = req.body;
 
     if (employmentType && !EMPLOYMENT_TYPES.includes(employmentType)) {
@@ -168,6 +195,9 @@ export const updateJob = async (req, res) => {
     }
     if (status && !STATUSES.includes(status)) {
       return res.status(400).json({ error: `status must be one of ${STATUSES.join(", ")}` });
+    }
+    if (workSystem && !WORK_SYSTEMS.includes(workSystem)) {
+      return res.status(400).json({ error: `workSystem must be one of ${WORK_SYSTEMS.join(", ")}` });
     }
     // Moving a posting to another entity requires access to the target too
     if (plottingCompanyId && plottingCompanyId !== existing.plottingCompanyId) {
@@ -187,6 +217,12 @@ export const updateJob = async (req, res) => {
     if (closeDate !== undefined) data.closeDate = closeDate ? new Date(closeDate) : null;
     if (plottingCompanyId !== undefined) data.plottingCompanyId = plottingCompanyId;
     if (recruiterId !== undefined) data.recruiterId = recruiterId || null;
+    if (categoryId !== undefined) data.categoryId = categoryId || null;
+    if (requirements !== undefined) data.requirements = requirements || null;
+    if (workSystem !== undefined) data.workSystem = workSystem || null;
+    if (salaryMin !== undefined) data.salaryMin = salaryMin === "" || salaryMin === null ? null : Number(salaryMin);
+    if (salaryMax !== undefined) data.salaryMax = salaryMax === "" || salaryMax === null ? null : Number(salaryMax);
+    if (salaryDisplay !== undefined) data.salaryDisplay = Boolean(salaryDisplay);
 
     const posting = await prisma.jobPosting.update({
       where: { id: req.params.id },
@@ -240,13 +276,14 @@ function applyRecruitmentAccessFilter(where, user) {
 // GET /api/recruitment/public/jobs — only OPEN postings
 export const listPublic = async (req, res) => {
   try {
+    const where = { status: "OPEN" };
+    if (req.query.category) where.categoryId = req.query.category;
+    if (req.query.workType) where.employmentType = req.query.workType;
+    if (req.query.workSystem) where.workSystem = req.query.workSystem;
+
     const postings = await prisma.jobPosting.findMany({
-      where: { status: "OPEN" },
-      select: {
-        id: true, title: true, department: true, location: true,
-        employmentType: true, openings: true, closeDate: true, createdAt: true,
-        plottingCompany: { select: { id: true, name: true } },
-      },
+      where,
+      select: PUBLIC_POSTING_SELECT,
       orderBy: { createdAt: "desc" },
     });
     return res.json(postings);
@@ -261,21 +298,27 @@ export const getPublic = async (req, res) => {
   try {
     const posting = await prisma.jobPosting.findFirst({
       where: { id: req.params.id, status: "OPEN" },
-      select: {
-        id: true, title: true, description: true, department: true, location: true,
-        employmentType: true, openings: true, closeDate: true, createdAt: true,
-        plottingCompany: { select: { id: true, name: true } },
-      },
+      select: PUBLIC_POSTING_SELECT,
     });
     if (!posting) return res.status(404).json({ error: "Job not found or not open" });
-    return res.json(posting);
+    return res.json(publicPosting(posting));
   } catch (error) {
     console.error("Get public job error:", error);
     return res.status(500).json({ error: "Failed to fetch job" });
   }
 };
 
+export const listCategories = async (_req, res) => {
+  try {
+    const categories = await prisma.jobCategory.findMany({ orderBy: { name: "asc" } });
+    return res.json(categories);
+  } catch (error) {
+    console.error("List job categories error:", error);
+    return res.status(500).json({ error: "Failed to fetch job categories" });
+  }
+};
+
 export { canAccessEntity, canAccessPosting, canManagePosting };
 export default {
-  listJobs, getJob, createJob, updateJob, deleteJob, listPublic, getPublic, canAccessEntity, canAccessPosting, canManagePosting,
+  listJobs, getJob, createJob, updateJob, deleteJob, listPublic, getPublic, listCategories, canAccessEntity, canAccessPosting, canManagePosting,
 };

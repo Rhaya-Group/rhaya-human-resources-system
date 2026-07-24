@@ -89,6 +89,24 @@ Nine entities total. Six are new (v2). Three exist from v0.
 
 ---
 
+## `JobPosting.requirements` JSON shape (locked)
+
+```json
+{
+  "genderPreference": "any | male | female | empty string",
+  "ageMin": "number or null",
+  "ageMax": "number or null",
+  "minEducation": "string",
+  "minExperienceYears": "number or null",
+  "requiredSkills": ["string"],
+  "domisili": "string"
+}
+```
+
+> Do not change this shape without a migration plan for existing `job_postings.requirements` rows.
+
+---
+
 ## Reference enums
 
 **Application stages (12):**

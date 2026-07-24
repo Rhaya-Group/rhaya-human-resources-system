@@ -9,9 +9,16 @@ import UserPicker from "./UserPicker";
 const EMPTY = {
   title: "", description: "", department: "", location: "",
   employmentType: "FULL_TIME", status: "DRAFT", openings: 1, closeDate: "", plottingCompanyId: "", recruiterId: "",
+  categoryId: "", workSystem: "", salaryMin: "", salaryMax: "", salaryDisplay: false,
+  requirements: {
+    genderPreference: "", ageMin: "", ageMax: "", minEducation: "",
+    minExperienceYears: "", requiredSkills: "", domisili: "",
+  },
 };
-const EMP_TYPES = ["FULL_TIME", "CONTRACT", "INTERN"];
+const EMP_TYPES = ["FULL_TIME", "CONTRACT", "INTERN", "PART_TIME", "FREELANCE"];
 const STATUSES = ["DRAFT", "OPEN", "CLOSED"];
+const WORK_SYSTEMS = ["WFO", "WFH", "HYBRID"];
+const EDUCATION_LEVELS = ["SMA/SMK", "Diploma", "Bachelor", "Master", "Doctorate"];
 
 export default function JobPostings() {
   const qc = useQueryClient();
@@ -35,11 +42,39 @@ export default function JobPostings() {
     enabled: isHr,
     queryFn: async () => (await apiClient.get("/users")).data,
   });
+  const { data: categories = [] } = useQuery({
+    queryKey: ["jobCategories"],
+    enabled: isHr,
+    queryFn: async () => (await apiClient.get("/recruitment/categories")).data,
+  });
   const users = (usersRes?.users || usersRes?.data || []).filter((user) => user.accessLevel <= 2);
 
   function reset() { setForm(EMPTY); setEditingId(null); setError(null); }
 
+  function setReq(key, value) {
+    setForm((prev) => ({ ...prev, requirements: { ...prev.requirements, [key]: value } }));
+  }
+
+  function normalizePayload() {
+    const requirements = {
+      ...form.requirements,
+      ageMin: form.requirements.ageMin === "" ? null : Number(form.requirements.ageMin),
+      ageMax: form.requirements.ageMax === "" ? null : Number(form.requirements.ageMax),
+      minExperienceYears: form.requirements.minExperienceYears === "" ? null : Number(form.requirements.minExperienceYears),
+      requiredSkills: form.requirements.requiredSkills.split(",").map((s) => s.trim()).filter(Boolean),
+    };
+    return {
+      ...form,
+      openings: Number(form.openings) || 1,
+      closeDate: form.closeDate || null,
+      salaryMin: form.salaryMin === "" ? null : Number(form.salaryMin),
+      salaryMax: form.salaryMax === "" ? null : Number(form.salaryMax),
+      requirements,
+    };
+  }
+
   function startEdit(job) {
+    const req = job.requirements || {};
     setEditingId(job.id);
     setError(null);
     setForm({
@@ -48,6 +83,20 @@ export default function JobPostings() {
       employmentType: job.employmentType, status: job.status,
       openings: job.openings, plottingCompanyId: job.plottingCompanyId,
       recruiterId: job.recruiterId || job.recruiter?.id || "",
+      categoryId: job.categoryId || "",
+      workSystem: job.workSystem || "",
+      salaryMin: job.salaryMin ?? "",
+      salaryMax: job.salaryMax ?? "",
+      salaryDisplay: Boolean(job.salaryDisplay),
+      requirements: {
+        genderPreference: req.genderPreference || "",
+        ageMin: req.ageMin ?? "",
+        ageMax: req.ageMax ?? "",
+        minEducation: req.minEducation || "",
+        minExperienceYears: req.minExperienceYears ?? "",
+        requiredSkills: Array.isArray(req.requiredSkills) ? req.requiredSkills.join(", ") : "",
+        domisili: req.domisili || "",
+      },
       closeDate: job.closeDate ? job.closeDate.slice(0, 10) : "",
     });
   }
@@ -55,7 +104,7 @@ export default function JobPostings() {
   async function submit(e) {
     e.preventDefault();
     setError(null);
-    const payload = { ...form, openings: Number(form.openings) || 1, closeDate: form.closeDate || null };
+    const payload = normalizePayload();
     try {
       if (editingId) await apiClient.put(`/recruitment/jobs/${editingId}`, payload);
       else await apiClient.post("/recruitment/jobs", payload);
@@ -102,6 +151,12 @@ export default function JobPostings() {
             onChange={(recruiterId) => setForm({ ...form, recruiterId })}
             placeholder="No recruiter assigned"
           />
+          <select value={form.categoryId}
+            onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+            <option value="">Select category…</option>
+            {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+          </select>
           <div className="grid grid-cols-2 gap-3">
             <input placeholder="Department" value={form.department}
               onChange={(e) => setForm({ ...form, department: e.target.value })}
@@ -114,6 +169,12 @@ export default function JobPostings() {
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
               {EMP_TYPES.map((t) => <option key={t} value={t}>{t.replace("_", " ")}</option>)}
             </select>
+            <select value={form.workSystem}
+              onChange={(e) => setForm({ ...form, workSystem: e.target.value })}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+              <option value="">Work system</option>
+              {WORK_SYSTEMS.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
             <select value={form.status}
               onChange={(e) => setForm({ ...form, status: e.target.value })}
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
@@ -125,6 +186,53 @@ export default function JobPostings() {
             <input type="date" value={form.closeDate}
               onChange={(e) => setForm({ ...form, closeDate: e.target.value })}
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <input type="number" min={0} placeholder="Salary min" value={form.salaryMin}
+              onChange={(e) => setForm({ ...form, salaryMin: e.target.value })}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+            <input type="number" min={0} placeholder="Salary max" value={form.salaryMax}
+              onChange={(e) => setForm({ ...form, salaryMax: e.target.value })}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input type="checkbox" checked={form.salaryDisplay}
+              onChange={(e) => setForm({ ...form, salaryDisplay: e.target.checked })} />
+            Show salary publicly
+          </label>
+          <div className="border border-gray-200 rounded-lg p-3 space-y-3">
+            <p className="text-sm font-medium text-gray-900">Requirements</p>
+            <div className="grid grid-cols-2 gap-3">
+              <select value={form.requirements.genderPreference}
+                onChange={(e) => setReq("genderPreference", e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+                <option value="">Gender preference</option>
+                <option value="any">Any</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+              </select>
+              <input placeholder="Domisili" value={form.requirements.domisili}
+                onChange={(e) => setReq("domisili", e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+              <input type="number" min={0} placeholder="Age min" value={form.requirements.ageMin}
+                onChange={(e) => setReq("ageMin", e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+              <input type="number" min={0} placeholder="Age max" value={form.requirements.ageMax}
+                onChange={(e) => setReq("ageMax", e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+              <select value={form.requirements.minEducation}
+                onChange={(e) => setReq("minEducation", e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+                <option value="">Min education</option>
+                {EDUCATION_LEVELS.map((level) => <option key={level} value={level}>{level}</option>)}
+              </select>
+              <input type="number" min={0} placeholder="Min experience years" value={form.requirements.minExperienceYears}
+                onChange={(e) => setReq("minExperienceYears", e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <input placeholder="Required skills, separated by comma" value={form.requirements.requiredSkills}
+              onChange={(e) => setReq("requiredSkills", e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
           </div>
           <div className="flex gap-2">
             <button className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">
@@ -148,6 +256,9 @@ export default function JobPostings() {
                   <p className="font-semibold text-gray-900">{job.title}</p>
                   <p className="text-xs text-gray-500 mt-0.5">
                     {job.plottingCompany?.name} · {job.status} · {job.employmentType?.replace("_", " ")}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {[job.category?.name, job.workSystem].filter(Boolean).join(" · ")}
                   </p>
                   {job.recruiter && (
                     <p className="text-xs text-gray-500 mt-0.5">Recruiter: {job.recruiter.name || job.recruiter.email}</p>

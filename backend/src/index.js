@@ -33,6 +33,7 @@ import wfhRoutes from "./routes/wfh.routes.js";
 // Recruitment module routes
 import applicantAuthRoutes from "./routes/applicantAuth.routes.js";
 import publicJobRoutes from "./routes/publicJob.routes.js";
+import jobCategoryRoutes from "./routes/jobCategory.routes.js";
 import applicantPortalRoutes from "./routes/applicantPortal.routes.js";
 import applicantDocumentRoutes from "./routes/applicantDocument.routes.js";
 import jobPostingRoutes from "./routes/jobPosting.routes.js";
@@ -214,6 +215,7 @@ app.use("/api/wfh", wfhRoutes);
 // Candidate auth + public job board (no HR auth). Applying requires applicant token.
 app.use("/api/recruitment/applicant-auth", applicantAuthRoutes);
 app.use("/api/recruitment/public", publicJobRoutes);
+app.use("/api/recruitment/categories", jobCategoryRoutes);
 app.use("/api/recruitment/my/documents", applicantAuthenticate, applicantDocumentRoutes);
 // Candidate's own application tracking (applicant token).
 app.use("/api/recruitment/my", applicantAuthenticate, applicantPortalRoutes);

@@ -943,19 +943,26 @@ model JobPosting {
   description       String                       // long text / markdown
   department        String?
   location          String?
-  employmentType    String           @default("FULL_TIME") // FULL_TIME|CONTRACT|INTERN
+  employmentType    String           @default("FULL_TIME") // FULL_TIME|CONTRACT|INTERN|PART_TIME|FREELANCE
   status            String           @default("DRAFT")     // DRAFT|OPEN|CLOSED
   openings          Int              @default(1)
   closeDate         DateTime?
   plottingCompanyId String                       // entity scope anchor
   createdById       String                       // HR User who created
   recruiterId       String?                      // assigned recruiter (HR User)
+  categoryId        String?
+  requirements      Json?
+  workSystem        String?                      // WFO|WFH|HYBRID
+  salaryMin         Int?
+  salaryMax         Int?
+  salaryDisplay     Boolean          @default(false)
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 
   plottingCompany   PlottingCompany      @relation(fields: [plottingCompanyId], references: [id])
   createdBy         User                 @relation("JobPostingCreator",   fields: [createdById],  references: [id])
   recruiter         User?                @relation("JobPostingRecruiter",  fields: [recruiterId],  references: [id])
+  category          JobCategory?         @relation(fields: [categoryId], references: [id])
   applications      JobApplication[]
   questions         PositionQuestion[]
   overseers         PositionOverseer[]
@@ -964,7 +971,16 @@ model JobPosting {
   @@index([plottingCompanyId])
   @@index([status])
   @@index([recruiterId])
+  @@index([categoryId])
   @@map("job_postings")
+}
+
+model JobCategory {
+  id        String       @id @default(cuid())
+  name      String       @unique
+  postings  JobPosting[]
+
+  @@map("job_categories")
 }
 
 model JobApplication {
