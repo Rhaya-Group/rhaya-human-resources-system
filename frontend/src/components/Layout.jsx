@@ -509,20 +509,24 @@ export default function Layout({ children }) {
     });
   }
 
-  // RECRUITMENT (Level 1–2 — HR can manage question bank, pipeline, overseers)
-  if (user?.accessLevel <= 2) {
+  // RECRUITMENT: HR gets full tools; overseers/non-HR get posting/pipeline visibility only.
+  if (user?.accessLevel) {
+    const recruitmentChildren = user.accessLevel <= 2
+      ? [
+        { path: "/recruitment/candidates", label: "Candidate Pool" },
+        { path: "/recruitment/documents", label: "Documents" },
+        { path: "/recruitment/jobs", label: "Job Postings" },
+        { path: "/recruitment/questions", label: "Question Bank" },
+      ]
+      : [{ path: "/recruitment/jobs", label: "Job Postings" }];
+
     navItems.push({
       label: "Recruitment",
       icon: Briefcase,
       type: "dropdown",
       isOpen: isRecruitmentOpen,
       toggle: () => setIsRecruitmentOpen(!isRecruitmentOpen),
-      children: [
-        { path: "/recruitment/candidates", label: "Candidate Pool" },
-        { path: "/recruitment/documents", label: "Documents" },
-        { path: "/recruitment/jobs", label: "Job Postings" },
-        { path: "/recruitment/questions", label: "Question Bank" },
-      ],
+      children: recruitmentChildren,
     });
   }
 

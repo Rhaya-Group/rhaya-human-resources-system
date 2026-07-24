@@ -400,7 +400,7 @@ function App() {
           <Route
             path="/recruitment/jobs"
             element={
-              <ProtectedRoute allowedLevels={[1, 2]}>
+              <ProtectedRoute>
                 <JobPostings />
               </ProtectedRoute>
             }
@@ -408,7 +408,7 @@ function App() {
           <Route
             path="/recruitment/jobs/:id/pipeline"
             element={
-              <ProtectedRoute allowedLevels={[1, 2]}>
+              <ProtectedRoute>
                 <Pipeline />
               </ProtectedRoute>
             }

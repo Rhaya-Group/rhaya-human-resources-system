@@ -4,7 +4,6 @@
 // Public read endpoints (listPublic/getPublic) need no auth and only expose OPEN postings.
 
 import prisma from "../config/database.js";
-import { applyScopeFilter } from "../utils/scopeHelper.js";
 
 const EMPLOYMENT_TYPES = ["FULL_TIME", "CONTRACT", "INTERN"];
 const STATUSES = ["DRAFT", "OPEN", "CLOSED"];
@@ -33,6 +32,30 @@ async function canAccessEntity(user, plottingCompanyId) {
   return false;
 }
 
+async function canAccessPosting(user, posting) {
+  if (!posting) return false;
+  if (await canAccessEntity(user, posting.plottingCompanyId)) return true;
+  if (posting.createdById === user.id || posting.recruiterId === user.id) return true;
+
+  const overseer = await prisma.positionOverseer.findUnique({
+    where: { jobPostingId_hrisUserId: { jobPostingId: posting.id, hrisUserId: user.id } },
+    select: { id: true },
+  });
+  return !!overseer;
+}
+
+async function canManagePosting(user, posting) {
+  if (!posting) return false;
+  if (await canAccessEntity(user, posting.plottingCompanyId)) return true;
+  if (posting.createdById === user.id || posting.recruiterId === user.id) return true;
+
+  const overseer = await prisma.positionOverseer.findUnique({
+    where: { jobPostingId_hrisUserId: { jobPostingId: posting.id, hrisUserId: user.id } },
+    select: { access: true },
+  });
+  return overseer?.access === "manage";
+}
+
 const POSTING_INCLUDE = {
   plottingCompany: { select: { id: true, name: true, code: true } },
   createdBy: { select: { id: true, name: true, email: true } },
@@ -46,7 +69,7 @@ export const listJobs = async (req, res) => {
     if (req.query.status) where.status = req.query.status;
     if (req.query.entityId) where.plottingCompanyId = req.query.entityId;
 
-    applyScopeFilter(where, req.user);
+    applyRecruitmentAccessFilter(where, req.user);
 
     const postings = await prisma.jobPosting.findMany({
       where,
@@ -69,7 +92,7 @@ export const getJob = async (req, res) => {
     });
     if (!posting) return res.status(404).json({ error: "Job posting not found" });
 
-    if (!(await canAccessEntity(req.user, posting.plottingCompanyId))) {
+    if (!(await canAccessPosting(req.user, posting))) {
       return res.status(403).json({ error: "Access denied for this entity" });
     }
     return res.json(posting);
@@ -126,10 +149,10 @@ export const updateJob = async (req, res) => {
   try {
     const existing = await prisma.jobPosting.findUnique({
       where: { id: req.params.id },
-      select: { id: true, plottingCompanyId: true },
+      select: { id: true, plottingCompanyId: true, createdById: true, recruiterId: true },
     });
     if (!existing) return res.status(404).json({ error: "Job posting not found" });
-    if (!(await canAccessEntity(req.user, existing.plottingCompanyId))) {
+    if (!(await canManagePosting(req.user, existing))) {
       return res.status(403).json({ error: "Access denied for this entity" });
     }
 
@@ -179,10 +202,10 @@ export const deleteJob = async (req, res) => {
   try {
     const existing = await prisma.jobPosting.findUnique({
       where: { id: req.params.id },
-      select: { id: true, plottingCompanyId: true },
+      select: { id: true, plottingCompanyId: true, createdById: true, recruiterId: true },
     });
     if (!existing) return res.status(404).json({ error: "Job posting not found" });
-    if (!(await canAccessEntity(req.user, existing.plottingCompanyId))) {
+    if (!(await canManagePosting(req.user, existing))) {
       return res.status(403).json({ error: "Access denied for this entity" });
     }
 
@@ -193,6 +216,21 @@ export const deleteJob = async (req, res) => {
     return res.status(500).json({ error: "Failed to delete job posting" });
   }
 };
+
+function applyRecruitmentAccessFilter(where, user) {
+  if (user.accessLevel === 1) return where;
+
+  const scopeOr = [];
+  const { scopeEntityIds = [], scopeGroupIds = [] } = user;
+  if (scopeEntityIds.length) scopeOr.push({ plottingCompanyId: { in: scopeEntityIds } });
+  if (scopeGroupIds.length) scopeOr.push({ plottingCompany: { groupId: { in: scopeGroupIds } } });
+  scopeOr.push({ createdById: user.id });
+  scopeOr.push({ recruiterId: user.id });
+  scopeOr.push({ overseers: { some: { hrisUserId: user.id } } });
+
+  where.AND = [...(where.AND || []), { OR: scopeOr }];
+  return where;
+}
 
 // ─── Public (no auth) ──────────────────────────────────────────────────────────
 
@@ -234,7 +272,7 @@ export const getPublic = async (req, res) => {
   }
 };
 
-export { canAccessEntity };
+export { canAccessEntity, canAccessPosting, canManagePosting };
 export default {
-  listJobs, getJob, createJob, updateJob, deleteJob, listPublic, getPublic, canAccessEntity,
+  listJobs, getJob, createJob, updateJob, deleteJob, listPublic, getPublic, canAccessEntity, canAccessPosting, canManagePosting,
 };

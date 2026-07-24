@@ -4,7 +4,7 @@
 // Every stage change / note writes an ApplicationEvent (pipeline audit trail).
 
 import prisma from "../config/database.js";
-import { canAccessEntity } from "./jobPosting.controller.js";
+import { canAccessPosting, canManagePosting } from "./jobPosting.controller.js";
 import { ruleMatches } from "../utils/recruitmentKnockout.js";
 import { publicFileUrl, getFileFromR2 } from "../services/r2.service.js";
 import { sendApplicationConfirmationEmail, sendStageChangeEmail } from "../services/email.service.js";
@@ -197,7 +197,7 @@ export const withdraw = async (req, res) => {
 // ─── HR ────────────────────────────────────────────────────────────────────────
 
 // Load an application + verify the HR user can access its posting's entity.
-async function loadScopedApplication(applicationId, user) {
+async function loadScopedApplication(applicationId, user, { manage = false } = {}) {
   const application = await prisma.jobApplication.findUnique({
     where: { id: applicationId },
     include: {
@@ -212,14 +212,16 @@ async function loadScopedApplication(applicationId, user) {
           parsedCv: true,
         },
       },
-      jobPosting: { select: { id: true, title: true, plottingCompanyId: true } },
+      jobPosting: { select: { id: true, title: true, plottingCompanyId: true, createdById: true, recruiterId: true } },
       events: { orderBy: { createdAt: "desc" } },
       answers: { include: { question: true } },
       documents: { orderBy: { createdAt: "desc" } },
     },
   });
   if (!application) return { error: 404 };
-  const allowed = await canAccessEntity(user, application.jobPosting.plottingCompanyId);
+  const allowed = manage
+    ? await canManagePosting(user, application.jobPosting)
+    : await canAccessPosting(user, application.jobPosting);
   if (!allowed) return { error: 403 };
 
   const positionQuestions = await prisma.positionQuestion.findMany({
@@ -248,10 +250,10 @@ export const listForHr = async (req, res) => {
 
     const posting = await prisma.jobPosting.findUnique({
       where: { id: postingId },
-      select: { id: true, plottingCompanyId: true },
+      select: { id: true, plottingCompanyId: true, createdById: true, recruiterId: true },
     });
     if (!posting) return res.status(404).json({ error: "Job posting not found" });
-    if (!(await canAccessEntity(req.user, posting.plottingCompanyId))) {
+    if (!(await canAccessPosting(req.user, posting))) {
       return res.status(403).json({ error: "Access denied for this entity" });
     }
 
@@ -309,7 +311,7 @@ export const updateStage = async (req, res) => {
       return res.status(400).json({ error: `stage must be one of ${STAGES.join(", ")}` });
     }
 
-    const { application, error } = await loadScopedApplication(req.params.id, req.user);
+    const { application, error } = await loadScopedApplication(req.params.id, req.user, { manage: true });
     if (error === 404) return res.status(404).json({ error: "Application not found" });
     if (error === 403) return res.status(403).json({ error: "Access denied for this entity" });
 
@@ -361,7 +363,7 @@ export const addNote = async (req, res) => {
       return res.status(400).json({ error: "type must be NOTE or INTERVIEW_SCHEDULED" });
     }
 
-    const { application, error } = await loadScopedApplication(req.params.id, req.user);
+    const { application, error } = await loadScopedApplication(req.params.id, req.user, { manage: true });
     if (error === 404) return res.status(404).json({ error: "Application not found" });
     if (error === 403) return res.status(403).json({ error: "Access denied for this entity" });
 

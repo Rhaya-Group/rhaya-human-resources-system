@@ -217,13 +217,13 @@ app.use("/api/recruitment/public", publicJobRoutes);
 app.use("/api/recruitment/my/documents", applicantAuthenticate, applicantDocumentRoutes);
 // Candidate's own application tracking (applicant token).
 app.use("/api/recruitment/my", applicantAuthenticate, applicantPortalRoutes);
-// HR-only, entity-scoped: postings CRUD + application pipeline (reuses existing User auth).
-app.use("/api/recruitment/jobs", authenticate, authorizeHR, jobPostingRoutes);
-app.use("/api/recruitment/applications", authenticate, authorizeHR, jobApplicationRoutes);
+// Recruitment posting access is controller-gated: entity scope, creator/recruiter, or position overseer.
+app.use("/api/recruitment/jobs", authenticate, jobPostingRoutes);
+app.use("/api/recruitment/applications", authenticate, jobApplicationRoutes);
 // HR: question bank + position assignment
 app.use("/api/recruitment/questions", authenticate, authorizeHR, questionRoutes);
-// HR: position overseers
-app.use("/api/recruitment/postings", authenticate, authorizeHR, positionOverseerRoutes);
+// Position overseers: controller enforces manage rights for each posting.
+app.use("/api/recruitment/postings", authenticate, positionOverseerRoutes);
 // HR: document management
 app.use("/api/recruitment/documents", authenticate, authorizeHR, recruitmentDocumentRoutes);
 // HR: global candidate pool (Applicant has no entity scope).

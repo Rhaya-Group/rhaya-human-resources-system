@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { ListChecks, Users, Pencil, Trash2, UserPlus } from "lucide-react";
 import apiClient from "../../api/client";
+import { useAuth } from "../../hooks/useAuth";
 
 const EMPTY = {
   title: "", description: "", department: "", location: "",
@@ -13,6 +14,8 @@ const STATUSES = ["DRAFT", "OPEN", "CLOSED"];
 
 export default function JobPostings() {
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const isHr = user?.accessLevel <= 2;
   const [form, setForm] = useState(EMPTY);
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState(null);
@@ -23,6 +26,7 @@ export default function JobPostings() {
   });
   const { data: entities = [] } = useQuery({
     queryKey: ["entities"],
+    enabled: isHr,
     queryFn: async () => (await apiClient.get("/plotting-companies")).data?.data || [],
   });
 
@@ -67,7 +71,8 @@ export default function JobPostings() {
         <p className="text-sm text-gray-500 mt-1">Manage open positions and their recruitment pipeline.</p>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
+      <div className={isHr ? "grid md:grid-cols-2 gap-6" : "space-y-3"}>
+        {isHr && (
         <form onSubmit={submit} className="bg-white border border-gray-200 rounded-xl p-5 space-y-3 h-fit">
           <h2 className="font-semibold text-gray-900">{editingId ? "Edit posting" : "New posting"}</h2>
           {error && <p className="text-sm text-red-600">{error}</p>}
@@ -118,6 +123,7 @@ export default function JobPostings() {
             )}
           </div>
         </form>
+        )}
 
         <div className="space-y-3">
           {jobs.length === 0 && <p className="text-gray-500 text-sm">No postings yet.</p>}
@@ -130,27 +136,27 @@ export default function JobPostings() {
                     {job.plottingCompany?.name} · {job.status} · {job.employmentType?.replace("_", " ")}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                {isHr && <div className="flex items-center gap-2">
                   <button onClick={() => startEdit(job)} className="text-gray-400 hover:text-blue-600">
                     <Pencil className="w-4 h-4" />
                   </button>
                   <button onClick={() => remove(job.id)} className="text-gray-400 hover:text-red-600">
                     <Trash2 className="w-4 h-4" />
                   </button>
-                </div>
+                </div>}
               </div>
               <Link to={`/recruitment/jobs/${job.id}/pipeline`}
                 className="mt-3 mr-4 inline-flex items-center gap-1 text-sm text-blue-600 hover:underline">
                 <Users className="w-4 h-4" /> {job._count?.applications ?? 0} applicant(s) · pipeline
               </Link>
-              <Link to={`/recruitment/jobs/${job.id}/questions`}
+              {isHr && <Link to={`/recruitment/jobs/${job.id}/questions`}
                 className="mt-3 inline-flex items-center gap-1 text-sm text-blue-600 hover:underline">
                 <ListChecks className="w-4 h-4" /> Manage Questions
-              </Link>
-              <Link to={`/recruitment/jobs/${job.id}/overseers`}
+              </Link>}
+              {isHr && <Link to={`/recruitment/jobs/${job.id}/overseers`}
                 className="mt-3 ml-4 inline-flex items-center gap-1 text-sm text-blue-600 hover:underline">
                 <UserPlus className="w-4 h-4" /> Overseers
-              </Link>
+              </Link>}
             </div>
           ))}
         </div>
