@@ -4,10 +4,11 @@ import { Link } from "react-router-dom";
 import { ListChecks, Users, Pencil, Trash2, UserPlus } from "lucide-react";
 import apiClient from "../../api/client";
 import { useAuth } from "../../hooks/useAuth";
+import UserPicker from "./UserPicker";
 
 const EMPTY = {
   title: "", description: "", department: "", location: "",
-  employmentType: "FULL_TIME", status: "DRAFT", openings: 1, closeDate: "", plottingCompanyId: "",
+  employmentType: "FULL_TIME", status: "DRAFT", openings: 1, closeDate: "", plottingCompanyId: "", recruiterId: "",
 };
 const EMP_TYPES = ["FULL_TIME", "CONTRACT", "INTERN"];
 const STATUSES = ["DRAFT", "OPEN", "CLOSED"];
@@ -29,6 +30,12 @@ export default function JobPostings() {
     enabled: isHr,
     queryFn: async () => (await apiClient.get("/plotting-companies")).data?.data || [],
   });
+  const { data: usersRes } = useQuery({
+    queryKey: ["hrisUsers"],
+    enabled: isHr,
+    queryFn: async () => (await apiClient.get("/users")).data,
+  });
+  const users = (usersRes?.users || usersRes?.data || []).filter((user) => user.accessLevel <= 2);
 
   function reset() { setForm(EMPTY); setEditingId(null); setError(null); }
 
@@ -40,6 +47,7 @@ export default function JobPostings() {
       department: job.department || "", location: job.location || "",
       employmentType: job.employmentType, status: job.status,
       openings: job.openings, plottingCompanyId: job.plottingCompanyId,
+      recruiterId: job.recruiterId || job.recruiter?.id || "",
       closeDate: job.closeDate ? job.closeDate.slice(0, 10) : "",
     });
   }
@@ -88,6 +96,12 @@ export default function JobPostings() {
             <option value="">Select entity…</option>
             {entities.map((en) => <option key={en.id} value={en.id}>{en.name}</option>)}
           </select>
+          <UserPicker
+            users={users}
+            value={form.recruiterId}
+            onChange={(recruiterId) => setForm({ ...form, recruiterId })}
+            placeholder="No recruiter assigned"
+          />
           <div className="grid grid-cols-2 gap-3">
             <input placeholder="Department" value={form.department}
               onChange={(e) => setForm({ ...form, department: e.target.value })}
@@ -135,6 +149,9 @@ export default function JobPostings() {
                   <p className="text-xs text-gray-500 mt-0.5">
                     {job.plottingCompany?.name} · {job.status} · {job.employmentType?.replace("_", " ")}
                   </p>
+                  {job.recruiter && (
+                    <p className="text-xs text-gray-500 mt-0.5">Recruiter: {job.recruiter.name || job.recruiter.email}</p>
+                  )}
                 </div>
                 {isHr && <div className="flex items-center gap-2">
                   <button onClick={() => startEdit(job)} className="text-gray-400 hover:text-blue-600">

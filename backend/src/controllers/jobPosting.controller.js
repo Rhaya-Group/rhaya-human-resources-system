@@ -59,6 +59,7 @@ async function canManagePosting(user, posting) {
 const POSTING_INCLUDE = {
   plottingCompany: { select: { id: true, name: true, code: true } },
   createdBy: { select: { id: true, name: true, email: true } },
+  recruiter: { select: { id: true, name: true, email: true } },
   _count: { select: { applications: true } },
 };
 
@@ -108,7 +109,7 @@ export const createJob = async (req, res) => {
     const {
       title, description, department, location,
       employmentType = "FULL_TIME", status = "DRAFT",
-      openings = 1, closeDate, plottingCompanyId,
+      openings = 1, closeDate, plottingCompanyId, recruiterId,
     } = req.body;
 
     if (!title || !description || !plottingCompanyId) {
@@ -133,6 +134,7 @@ export const createJob = async (req, res) => {
         openings: Number(openings) || 1,
         closeDate: closeDate ? new Date(closeDate) : null,
         plottingCompanyId,
+        recruiterId: recruiterId || null,
         createdById: req.user.id,
       },
       include: POSTING_INCLUDE,
@@ -158,7 +160,7 @@ export const updateJob = async (req, res) => {
 
     const {
       title, description, department, location,
-      employmentType, status, openings, closeDate, plottingCompanyId,
+      employmentType, status, openings, closeDate, plottingCompanyId, recruiterId,
     } = req.body;
 
     if (employmentType && !EMPLOYMENT_TYPES.includes(employmentType)) {
@@ -184,6 +186,7 @@ export const updateJob = async (req, res) => {
     if (openings !== undefined) data.openings = Number(openings) || 1;
     if (closeDate !== undefined) data.closeDate = closeDate ? new Date(closeDate) : null;
     if (plottingCompanyId !== undefined) data.plottingCompanyId = plottingCompanyId;
+    if (recruiterId !== undefined) data.recruiterId = recruiterId || null;
 
     const posting = await prisma.jobPosting.update({
       where: { id: req.params.id },

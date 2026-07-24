@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Trash2, UserPlus } from "lucide-react";
 import apiClient from "../../api/client";
+import UserPicker from "./UserPicker";
 
 const EMPTY = { hrisUserId: "", access: "view" };
 
@@ -10,7 +11,6 @@ export default function PositionOverseers() {
   const { postingId } = useParams();
   const qc = useQueryClient();
   const [form, setForm] = useState(EMPTY);
-  const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
 
   const { data: job } = useQuery({
@@ -29,12 +29,6 @@ export default function PositionOverseers() {
   });
   const users = usersRes?.users || usersRes?.data || [];
   const overseerIds = new Set(overseers.map((row) => row.hrisUserId));
-  const availableUsers = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return users
-      .filter((user) => !overseerIds.has(user.id))
-      .filter((user) => !q || `${user.name || ""} ${user.email || ""}`.toLowerCase().includes(q));
-  }, [users, overseers, search]);
 
   async function submit(e) {
     e.preventDefault();
@@ -43,7 +37,6 @@ export default function PositionOverseers() {
     try {
       await apiClient.post(`/recruitment/postings/${postingId}/overseers`, form);
       setForm(EMPTY);
-      setSearch("");
       qc.invalidateQueries({ queryKey: ["positionOverseers", postingId] });
     } catch (err) {
       alert(err?.error || err?.response?.data?.error || "Failed to add overseer");
@@ -88,26 +81,12 @@ export default function PositionOverseers() {
       <form onSubmit={submit} className="bg-white border border-gray-200 rounded-lg p-4 mb-5 space-y-3">
         <h2 className="font-semibold text-gray-900">Add overseer</h2>
         <div className="grid md:grid-cols-[1fr_150px_auto] gap-3">
-          <div>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search users by name or email"
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm mb-2"
-            />
-            <select
-              value={form.hrisUserId}
-              onChange={(e) => setForm((next) => ({ ...next, hrisUserId: e.target.value }))}
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white"
-            >
-              <option value="">Select user...</option>
-              {availableUsers.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.name || user.email} {user.email && user.name ? `(${user.email})` : ""}
-                </option>
-              ))}
-            </select>
-          </div>
+          <UserPicker
+            users={users}
+            value={form.hrisUserId}
+            onChange={(hrisUserId) => setForm((next) => ({ ...next, hrisUserId }))}
+            excludeIds={[...overseerIds]}
+          />
           <select
             value={form.access}
             onChange={(e) => setForm((next) => ({ ...next, access: e.target.value }))}
